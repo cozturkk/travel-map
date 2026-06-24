@@ -19,9 +19,9 @@ function NativeTabLayout() {
         <Icon sf={{ default: "list.bullet", selected: "list.bullet" }} />
         <Label>Trips</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="photos">
-        <Icon sf={{ default: "photo.on.rectangle", selected: "photo.on.rectangle.fill" }} />
-        <Label>Photos</Label>
+      <NativeTabs.Trigger name="inspire">
+        <Icon sf={{ default: "sparkles", selected: "sparkles" }} />
+        <Label>Inspire</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -54,7 +54,7 @@ function ClassicTabLayout() {
           isIOS ? (
             <BlurView
               intensity={90}
-              tint={isDark ? "dark" : "dark"}
+              tint="dark"
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
@@ -87,14 +87,14 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="photos"
+        name="inspire"
         options={{
-          title: "Photos",
+          title: "Inspire",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="photo.on.rectangle.fill" tintColor={color} size={22} />
+              <SymbolView name="sparkles" tintColor={color} size={22} />
             ) : (
-              <Feather name="image" size={22} color={color} />
+              <Feather name="star" size={22} color={color} />
             ),
         }}
       />

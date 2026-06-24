@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -128,16 +128,22 @@ export default function MapTab() {
   const topPad = isWeb ? 67 : insets.top;
 
   function sendCountriesToMap(countryNames: string[]) {
-    webviewRef.current?.injectJavaScript(
-      `handleMsg({data: JSON.stringify({type:'updateCountries', countries:${JSON.stringify(countryNames)}})});true;`
+    if (!webviewRef.current) return;
+    webviewRef.current.injectJavaScript(
+      `(function(){ var d={type:'updateCountries',countries:${JSON.stringify(countryNames)}};handleMsg({data:JSON.stringify(d)}); })();true;`
     );
   }
 
+  // Send countries to map whenever they change or map becomes ready
+  useEffect(() => {
+    if (!mapReady) return;
+    if (visitedCountryNames.length === 0) return;
+    const timer = setTimeout(() => sendCountriesToMap(visitedCountryNames), 300);
+    return () => clearTimeout(timer);
+  }, [mapReady, visitedCountryNames]);
+
   function handleWebViewLoad() {
     setMapReady(true);
-    if (visitedCountryNames.length > 0) {
-      setTimeout(() => sendCountriesToMap(visitedCountryNames), 500);
-    }
   }
 
   function handleWebViewMessage(event: { nativeEvent: { data: string } }) {
