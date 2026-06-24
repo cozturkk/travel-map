@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Travel Map",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "mobile",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Travel Map reads GPS metadata from your photos to automatically build your personal travel history. No photos are uploaded or shared.",
+        "NSLocationWhenInUseUsageDescription": "Location is used to identify places from your photo GPS data."
+      }
+    },
+    "android": {
+      "permissions": ["android.permission.READ_MEDIA_IMAGES", "android.permission.READ_EXTERNAL_STORAGE"]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-media-library",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Travel Map uses location services to identify countries and cities from your photo GPS data."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
