@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -24,148 +24,199 @@ function formatDateRange(first: number, last: number) {
   return f === l ? f : `${f} – ${l}`;
 }
 
-const MAP_HTML = `
-<!DOCTYPE html>
+// Works in both react-native-webview (native) and iframe (web)
+const buildMapHTML = () => `<!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body, html, #map { height: 100%; width: 100%; background: #0F172A; }
-    .leaflet-container { background: #0F172A !important; }
-    .leaflet-tile-pane { opacity: 0.7; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body,html,#map{height:100%;width:100%;background:#0F172A}
+    .leaflet-container{background:#0F172A!important}
+    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94A3B8;font-family:sans-serif;font-size:14px;z-index:999;pointer-events:none}
   </style>
 </head>
 <body>
+<div id="loading">Loading map…</div>
 <div id="map"></div>
 <script>
-  var visited = {};
-  var geojsonLayer = null;
-  var map = L.map('map', {
-    zoomControl: false,
-    attributionControl: false,
-    minZoom: 1,
-    maxZoom: 12,
-    worldCopyJump: false,
-  }).setView([20, 10], 2);
+var visited={};
+var geojsonLayer=null;
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
-    maxZoom: 20,
-  }).addTo(map);
+function sendUp(msg){
+  try{
+    if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(msg);}
+    else{window.parent.postMessage(msg,'*');}
+  }catch(e){}
+}
 
-  function getStyle(feature) {
-    var name = feature.properties.ADMIN || feature.properties.name || '';
-    var iso = feature.properties.ISO_A2 || '';
-    var isVisited = visited[name] || visited[iso];
-    return {
-      fillColor: isVisited ? '#F59E0B' : '#334155',
-      weight: 0.5,
-      opacity: 0.7,
-      color: isVisited ? '#D97706' : '#475569',
-      fillOpacity: isVisited ? 0.65 : 0.35,
-    };
-  }
+var map=L.map('map',{zoomControl:false,attributionControl:false,minZoom:1,maxZoom:12}).setView([20,10],2);
 
-  fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      geojsonLayer = L.geoJSON(data, {
-        style: getStyle,
-        onEachFeature: function(feature, layer) {
-          layer.on('click', function(e) {
-            var name = feature.properties.ADMIN || feature.properties.name || '';
-            var iso = feature.properties.ISO_A2 || '';
-            if (visited[name] || visited[iso]) {
-              var key = visited[name] ? name : iso;
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'countryTap', country: key }));
-              }
-            }
-          });
-        }
-      }).addTo(map);
-    })
-    .catch(function(e) { console.log('Map load error:', e); });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20}).addTo(map);
 
-  function handleMsg(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (d.type === 'updateCountries') {
-        visited = {};
-        d.countries.forEach(function(c) { visited[c] = true; });
-        if (geojsonLayer) geojsonLayer.setStyle(getStyle);
-      } else if (d.type === 'zoomCountry') {
-        if (!geojsonLayer) return;
-        geojsonLayer.eachLayer(function(layer) {
-          var name = layer.feature && (layer.feature.properties.ADMIN || layer.feature.properties.name || '');
-          if (name === d.country && layer.getBounds) {
-            map.fitBounds(layer.getBounds(), { padding: [30, 30] });
-          }
+function getStyle(f){
+  var name=f.properties.ADMIN||f.properties.name||'';
+  var iso=f.properties.ISO_A2||'';
+  var v=visited[name]||visited[iso];
+  return{fillColor:v?'#F59E0B':'#334155',weight:0.5,opacity:0.7,color:v?'#D97706':'#475569',fillOpacity:v?0.65:0.3};
+}
+
+function applyVisited(){if(geojsonLayer)geojsonLayer.setStyle(getStyle);}
+
+fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
+  .then(function(r){return r.json();})
+  .then(function(data){
+    geojsonLayer=L.geoJSON(data,{
+      style:getStyle,
+      onEachFeature:function(f,layer){
+        layer.on('click',function(){
+          var name=f.properties.ADMIN||f.properties.name||'';
+          if(visited[name]){sendUp(JSON.stringify({type:'countryTap',country:name}));}
         });
       }
-    } catch(err) {}
-  }
-  document.addEventListener('message', handleMsg);
-  window.addEventListener('message', handleMsg);
+    }).addTo(map);
+    document.getElementById('loading').style.display='none';
+    applyVisited();
+    sendUp(JSON.stringify({type:'mapReady'}));
+  })
+  .catch(function(e){
+    document.getElementById('loading').textContent='Map unavailable – check connection';
+    sendUp(JSON.stringify({type:'mapError',error:String(e)}));
+  });
+
+function handleMsg(e){
+  try{
+    var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
+    if(d.type==='updateCountries'){
+      visited={};
+      d.countries.forEach(function(c){visited[c]=true;});
+      applyVisited();
+    } else if(d.type==='zoomCountry'&&geojsonLayer){
+      geojsonLayer.eachLayer(function(layer){
+        var name=layer.feature&&(layer.feature.properties.ADMIN||layer.feature.properties.name||'');
+        if(name===d.country&&layer.getBounds)map.fitBounds(layer.getBounds(),{padding:[30,30]});
+      });
+    }
+  }catch(err){}
+}
+
+document.addEventListener('message',handleMsg);
+window.addEventListener('message',handleMsg);
 </script>
 </body>
-</html>
-`;
+</html>`;
+
+const MAP_HTML = buildMapHTML();
+
+// Web-only iframe component using createElement to bypass TS restrictions
+const WebIframe = React.memo(function WebIframe({
+  srcDoc,
+  iframeRef,
+}: {
+  srcDoc: string;
+  iframeRef: React.MutableRefObject<any>;
+}) {
+  return React.createElement("iframe", {
+    ref: iframeRef,
+    srcDoc,
+    style: {
+      width: "100%",
+      height: "100%",
+      border: "none",
+      display: "block",
+      background: "#0F172A",
+    },
+    allow: "geolocation",
+  }) as any;
+});
 
 export default function MapTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { permissionGranted, isLoading, progress, countries, visitedCountryNames } = useTravel();
+  const { permissionGranted, isLoading, progress, countries, visitedCountryNames } =
+    useTravel();
+
+  // Separate refs for native and web
   const webviewRef = useRef<WebView>(null);
+  const iframeRef = useRef<any>(null);
+
   const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryVisit | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
 
-  function sendCountriesToMap(countryNames: string[]) {
-    if (!webviewRef.current) return;
-    webviewRef.current.injectJavaScript(
-      `(function(){ var d={type:'updateCountries',countries:${JSON.stringify(countryNames)}};handleMsg({data:JSON.stringify(d)}); })();true;`
-    );
-  }
+  // Send a message to the Leaflet map (works for both iframe and WebView)
+  const sendToMap = useCallback(
+    (data: object) => {
+      const json = JSON.stringify(data);
+      if (isWeb) {
+        try {
+          iframeRef.current?.contentWindow?.postMessage(json, "*");
+        } catch {}
+      } else {
+        const escaped = JSON.stringify(json);
+        webviewRef.current?.injectJavaScript(
+          `(function(){handleMsg({data:${escaped}});})();true;`
+        );
+      }
+    },
+    [isWeb]
+  );
 
-  // Send countries to map whenever they change or map becomes ready
+  // Push visited countries whenever map is ready or country list changes
   useEffect(() => {
-    if (!mapReady) return;
-    if (visitedCountryNames.length === 0) return;
-    const timer = setTimeout(() => sendCountriesToMap(visitedCountryNames), 300);
-    return () => clearTimeout(timer);
-  }, [mapReady, visitedCountryNames]);
+    if (!mapReady || visitedCountryNames.length === 0) return;
+    const t = setTimeout(
+      () => sendToMap({ type: "updateCountries", countries: visitedCountryNames }),
+      200
+    );
+    return () => clearTimeout(t);
+  }, [mapReady, visitedCountryNames, sendToMap]);
 
-  function handleWebViewLoad() {
-    setMapReady(true);
+  // Listen for messages from the iframe (web only)
+  useEffect(() => {
+    if (!isWeb) return;
+    const handler = (e: MessageEvent) => {
+      if (!e.data) return;
+      try {
+        const msg = JSON.parse(e.data);
+        handleMapMessage(msg);
+      } catch {}
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [isWeb, countries]);
+
+  function handleMapMessage(msg: { type: string; country?: string; error?: string }) {
+    if (msg.type === "mapReady") {
+      setMapReady(true);
+    } else if (msg.type === "mapError") {
+      setMapError(true);
+    } else if (msg.type === "countryTap" && msg.country) {
+      const match = countries.find((c) => c.country === msg.country);
+      if (match) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setSelectedCountry(match);
+        setModalVisible(true);
+      }
+    }
   }
 
+  // Handle messages from native WebView
   function handleWebViewMessage(event: { nativeEvent: { data: string } }) {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
-      if (msg.type === "countryTap") {
-        const country = countries.find(
-          (c) => c.country === msg.country
-        );
-        if (country) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          setSelectedCountry(country);
-          setModalVisible(true);
-        }
-      }
+      handleMapMessage(msg);
     } catch {}
   }
 
   function zoomToCountry(countryName: string) {
-    webviewRef.current?.injectJavaScript(
-      `handleMsg({data: JSON.stringify({type:'zoomCountry', country:${JSON.stringify(countryName)}})});true;`
-    );
+    sendToMap({ type: "zoomCountry", country: countryName });
   }
 
   if (permissionGranted === false) {
@@ -174,39 +225,42 @@ export default function MapTab() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {isWeb ? (
-        <View style={[styles.webFallback, { paddingTop: topPad }]}>
-          <Ionicons name="map" size={48} color={colors.mutedForeground} />
-          <Text style={[styles.webFallbackText, { color: colors.mutedForeground }]}>
-            Interactive map available on iOS
-          </Text>
-        </View>
-      ) : (
-        <WebView
-          ref={webviewRef}
-          originWhitelist={["*"]}
-          source={{ html: MAP_HTML }}
-          style={styles.webview}
-          onLoad={handleWebViewLoad}
-          onMessage={handleWebViewMessage}
-          javaScriptEnabled
-          domStorageEnabled
-          allowsInlineMediaPlayback
-          onLoadEnd={() => {
-            if (visitedCountryNames.length > 0) {
-              setTimeout(() => sendCountriesToMap(visitedCountryNames), 800);
-            }
-          }}
-        />
-      )}
+      {/* Map area */}
+      <View style={styles.mapContainer}>
+        {isWeb ? (
+          <WebIframe srcDoc={MAP_HTML} iframeRef={iframeRef} />
+        ) : (
+          <WebView
+            ref={webviewRef}
+            originWhitelist={["*"]}
+            source={{ html: MAP_HTML, baseUrl: "https://www.google.com" }}
+            style={styles.webview}
+            javaScriptEnabled
+            domStorageEnabled
+            allowsInlineMediaPlayback
+            allowsLinkOpening={false}
+            onMessage={handleWebViewMessage}
+            onError={() => setMapError(true)}
+            renderError={() => (
+              <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+                <Ionicons name="warning-outline" size={32} color={colors.mutedForeground} />
+                <Text style={[styles.errorText, { color: colors.mutedForeground }]}>
+                  Map failed to load
+                </Text>
+              </View>
+            )}
+          />
+        )}
+      </View>
 
-      {/* Top badge */}
+      {/* Badge overlay */}
       <View style={[styles.badge, { top: topPad + 12, backgroundColor: colors.card }]}>
         {isLoading ? (
           <View style={styles.badgeInner}>
             <ActivityIndicator size="small" color={colors.accent} />
             <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>
-              {progress.stage} {progress.total > 0 ? `${progress.current}/${progress.total}` : ""}
+              {progress.stage}{" "}
+              {progress.total > 0 ? `${progress.current}/${progress.total}` : ""}
             </Text>
           </View>
         ) : (
@@ -222,17 +276,21 @@ export default function MapTab() {
         )}
       </View>
 
-      {/* Country Detail Modal */}
+      {/* Map loading overlay */}
+      {!mapReady && !mapError && (
+        <View style={styles.mapLoadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color={colors.mutedForeground} />
+        </View>
+      )}
+
+      {/* Country detail modal */}
       <Modal
         visible={modalVisible}
         transparent
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setModalVisible(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View
             style={[
               styles.modalSheet,
@@ -243,7 +301,7 @@ export default function MapTab() {
               <>
                 <View style={styles.modalHandle} />
                 <View style={styles.modalHeader}>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={[styles.modalCountry, { color: colors.foreground }]}>
                       {selectedCountry.country}
                     </Text>
@@ -282,7 +340,10 @@ export default function MapTab() {
                 </View>
 
                 {selectedCountry.cities.slice(0, 5).map((city) => (
-                  <View key={city.key} style={[styles.cityRow, { borderTopColor: colors.border }]}>
+                  <View
+                    key={city.key}
+                    style={[styles.cityRow, { borderTopColor: colors.border }]}
+                  >
                     <Ionicons name="location" size={14} color={colors.mutedForeground} />
                     <Text style={[styles.cityName, { color: colors.foreground }]}>
                       {city.city}
@@ -308,17 +369,16 @@ export default function MapTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  mapContainer: { flex: 1 },
   webview: { flex: 1 },
-  webFallback: {
+  errorContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
-    paddingHorizontal: 32,
   },
-  webFallbackText: {
-    fontSize: 16,
-    textAlign: "center",
+  errorText: {
+    fontSize: 15,
     fontFamily: "Inter_400Regular",
   },
   badge: {
@@ -334,22 +394,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
-  badgeInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  badgeCount: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-  },
-  badgeText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  badgeLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+  badgeInner: { flexDirection: "row", alignItems: "center", gap: 8 },
+  badgeCount: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  badgeText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  badgeLabel: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  mapLoadingOverlay: {
+    position: "absolute",
+    bottom: 60,
+    alignSelf: "center",
+    opacity: 0.6,
   },
   modalOverlay: {
     flex: 1,
@@ -376,15 +429,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 16,
   },
-  modalCountry: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-  },
-  modalDates: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
+  modalCountry: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  modalDates: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   zoomBtn: {
     width: 40,
     height: 40,
@@ -392,26 +438,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
-  },
+  statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
   statCard: {
     flex: 1,
     borderRadius: 12,
     padding: 14,
     alignItems: "center",
   },
-  statNum: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
+  statNum: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  statLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   cityRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -419,15 +454,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
   },
-  cityName: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  cityDates: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
+  cityName: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
+  cityDates: { fontSize: 12, fontFamily: "Inter_400Regular" },
   moreText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
