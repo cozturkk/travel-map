@@ -1,10 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
   Platform,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -13,7 +18,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { CityVisit, CountryVisit, useTravel } from "@/context/TravelContext";
+import { CityVisit, CountryVisit, PhotoAsset, useTravel } from "@/context/TravelContext";
+import { useHomeCity } from "@/context/HomeCityContext";
 import PermissionGate from "@/components/PermissionGate";
 import { buildMonthMap, calcStreaks, getStreakPeriod } from "@/utils/travelStats";
 
@@ -38,6 +44,84 @@ function formatDateRange(first: number, last: number) {
   if (fYear === lYear) return `${fMonth} – ${lMonth} ${fYear}`;
   return `${fMonth} ${fYear} – ${lMonth} ${lYear}`;
 }
+
+// ─── Photo Viewer ────────────────────────────────────────────────────────────
+
+function PhotoViewer({
+  uris,
+  initialIndex,
+  onClose,
+}: {
+  uris: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const { width, height } = Dimensions.get("window");
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  return (
+    <Modal visible animationType="fade" statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <View style={pvStyles.bar}>
+          <TouchableOpacity onPress={onClose} hitSlop={16} style={pvStyles.closeBtn}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <Text style={pvStyles.counter}>
+            {currentIndex + 1} / {uris.length}
+          </Text>
+          <View style={{ width: 48 }} />
+        </View>
+
+        <FlatList
+          data={uris}
+          keyExtractor={(_, i) => String(i)}
+          horizontal
+          pagingEnabled
+          initialScrollIndex={initialIndex}
+          showsHorizontalScrollIndicator={false}
+          getItemLayout={(_, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
+          onMomentumScrollEnd={(e) => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+            setCurrentIndex(idx);
+          }}
+          renderItem={({ item }) => (
+            <Image
+              source={{ uri: item }}
+              style={{ width, height: height - 140 }}
+              resizeMode="contain"
+            />
+          )}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+const pvStyles = StyleSheet.create({
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 56,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  closeBtn: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counter: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+  },
+});
 
 // ─── Heatmap ────────────────────────────────────────────────────────────────
 
@@ -86,9 +170,14 @@ function buildYearGrid(monthMap: Map<string, number>): YearRow[] {
   return rows;
 }
 
-function TravelStats({ countries }: { countries: CountryVisit[] }) {
+function TravelStats({
+  countries,
+  photos,
+}: {
+  countries: CountryVisit[];
+  photos: PhotoAsset[];
+}) {
   const colors = useColors();
-  const { photos } = useTravel();
 
   const monthMap = useMemo(() => buildMonthMap(photos), [photos]);
   const streaks = useMemo(() => calcStreaks(monthMap), [monthMap]);
@@ -104,7 +193,6 @@ function TravelStats({ countries }: { countries: CountryVisit[] }) {
 
   return (
     <View>
-      {/* Stat cards */}
       <View style={styles.statsRow}>
         {stats.map((s) => (
           <View key={s.label} style={[styles.statCard, { backgroundColor: colors.card }]}>
@@ -112,7 +200,7 @@ function TravelStats({ countries }: { countries: CountryVisit[] }) {
             <Text style={[styles.statNum, { color: colors.foreground }]}>
               {s.value}
               {s.suffix && (
-                <Text style={[styles.statSuffix, { color: colors.mutedForeground }]}>{" "}{s.suffix}</Text>
+                <Text style={[styles.statSuffix, { color: colors.mutedForeground }]}> {s.suffix}</Text>
               )}
             </Text>
             <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
@@ -120,7 +208,6 @@ function TravelStats({ countries }: { countries: CountryVisit[] }) {
         ))}
       </View>
 
-      {/* Activity heatmap */}
       {monthMap.size > 0 && (
         <View style={[styles.heatSection, { backgroundColor: colors.card }]}>
           <View style={styles.heatHeader}>
@@ -190,21 +277,63 @@ function TravelStats({ countries }: { countries: CountryVisit[] }) {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function CityItem({ city }: { city: CityVisit }) {
+function PhotoStrip({
+  uris,
+  onPress,
+}: {
+  uris: string[];
+  onPress: (index: number) => void;
+}) {
+  if (uris.length === 0) return null;
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.photoStrip}
+    >
+      {uris.map((uri, idx) => (
+        <TouchableOpacity
+          key={idx}
+          activeOpacity={0.8}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onPress(idx);
+          }}
+        >
+          <Image source={{ uri }} style={styles.thumb} />
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
+function CityItem({
+  city,
+  onPhotoPress,
+}: {
+  city: CityVisit;
+  onPhotoPress: (uris: string[], index: number) => void;
+}) {
   const colors = useColors();
   return (
-    <View style={[styles.cityRow, { borderBottomColor: colors.border }]}>
-      <Ionicons name="location-outline" size={14} color={colors.primary} />
-      <View style={styles.cityInfo}>
-        <Text style={[styles.cityName, { color: colors.foreground }]}>{city.city}</Text>
-        <Text style={[styles.cityDates, { color: colors.mutedForeground }]}>
-          {formatDateRange(city.firstDate, city.lastDate)}
-        </Text>
+    <View style={[styles.cityBlock, { borderBottomColor: colors.border }]}>
+      <View style={styles.cityRow}>
+        <Ionicons name="location-outline" size={14} color={colors.primary} />
+        <View style={styles.cityInfo}>
+          <Text style={[styles.cityName, { color: colors.foreground }]}>{city.city}</Text>
+          <Text style={[styles.cityDates, { color: colors.mutedForeground }]}>
+            {formatDateRange(city.firstDate, city.lastDate)}
+          </Text>
+        </View>
+        <View style={[styles.photoBadge, { backgroundColor: colors.muted }]}>
+          <Ionicons name="camera" size={11} color={colors.mutedForeground} />
+          <Text style={[styles.photoCount, { color: colors.mutedForeground }]}>{city.photoCount}</Text>
+        </View>
       </View>
-      <View style={[styles.photoBadge, { backgroundColor: colors.muted }]}>
-        <Ionicons name="camera" size={11} color={colors.mutedForeground} />
-        <Text style={[styles.photoCount, { color: colors.mutedForeground }]}>{city.photoCount}</Text>
-      </View>
+      <PhotoStrip
+        uris={city.photoUris ?? []}
+        onPress={(idx) => onPhotoPress(city.photoUris ?? [], idx)}
+      />
     </View>
   );
 }
@@ -232,19 +361,93 @@ function CountrySectionHeader({ country }: { country: CountryVisit }) {
   );
 }
 
+// ─── Home City Card ───────────────────────────────────────────────────────────
+
+function HomeCityCard({
+  cityVisit,
+  onPhotoPress,
+}: {
+  cityVisit: CityVisit;
+  onPhotoPress: (uris: string[], index: number) => void;
+}) {
+  const colors = useColors();
+  return (
+    <View style={[styles.homeCityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.homeCityCardHeader}>
+        <View style={[styles.homeBadge, { backgroundColor: colors.accent + "22" }]}>
+          <Ionicons name="home" size={13} color={colors.accent} />
+          <Text style={[styles.homeBadgeText, { color: colors.accent }]}>HOME</Text>
+        </View>
+        <View style={styles.homeCityMeta}>
+          <Text style={[styles.homeCityCardName, { color: colors.foreground }]}>
+            {cityVisit.city}
+          </Text>
+          <Text style={[styles.homeCityCardCountry, { color: colors.mutedForeground }]}>
+            {cityVisit.country} · {cityVisit.photoCount} photos
+          </Text>
+        </View>
+      </View>
+      <PhotoStrip
+        uris={cityVisit.photoUris ?? []}
+        onPress={(idx) => onPhotoPress(cityVisit.photoUris ?? [], idx)}
+      />
+      <Text style={[styles.homeCityNote, { color: colors.mutedForeground }]}>
+        Not counted in trip stats
+      </Text>
+    </View>
+  );
+}
+
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function ListTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { permissionGranted, isLoading, progress, countries, refresh } = useTravel();
+  const { permissionGranted, isLoading, progress, countries, photos, refresh } = useTravel();
+  const { homeCity } = useHomeCity();
+
+  const [viewerState, setViewerState] = useState<{ uris: string[]; index: number } | null>(null);
+
+  const openViewer = useCallback((uris: string[], index: number) => {
+    setViewerState({ uris, index });
+  }, []);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
 
+  // Separate home city from trip countries
+  const homeCityVisit = useMemo(() => {
+    if (!homeCity) return null;
+    const country = countries.find((c) => c.country === homeCity.country);
+    return country?.cities.find((ci) => ci.city === homeCity.city) ?? null;
+  }, [countries, homeCity]);
+
+  const tripCountries = useMemo(() => {
+    if (!homeCity) return countries;
+    return countries
+      .map((c) => {
+        if (c.country !== homeCity.country) return c;
+        const filteredCities = c.cities.filter((ci) => ci.city !== homeCity.city);
+        if (filteredCities.length === 0) return null;
+        return {
+          ...c,
+          cities: filteredCities,
+          photoCount: filteredCities.reduce((a, ci) => a + ci.photoCount, 0),
+        } as CountryVisit;
+      })
+      .filter((c): c is CountryVisit => c !== null);
+  }, [countries, homeCity]);
+
+  const tripPhotos = useMemo(() => {
+    if (!homeCity) return photos;
+    return photos.filter(
+      (p) => !(p.city === homeCity.city && p.country === homeCity.country)
+    );
+  }, [photos, homeCity]);
+
   if (permissionGranted === false) return <PermissionGate />;
 
-  const sections = countries.map((c) => ({ country: c, data: c.cities, key: c.country }));
+  const sections = tripCountries.map((c) => ({ country: c, data: c.cities, key: c.country }));
 
   if (isLoading && countries.length === 0) {
     return (
@@ -285,8 +488,10 @@ export default function ListTab() {
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.key}
-        renderItem={({ item }) => <CityItem city={item} />}
-        renderSectionHeader={({ section }) => <CountrySectionHeader country={section.country} />}
+        renderItem={({ item }) => <CityItem city={item} onPhotoPress={openViewer} />}
+        renderSectionHeader={({ section }) => (
+          <CountrySectionHeader country={section.country} />
+        )}
         contentContainerStyle={{ paddingTop: topPad + 8, paddingBottom: insets.bottom + 80 }}
         stickySectionHeadersEnabled
         refreshControl={
@@ -297,15 +502,34 @@ export default function ListTab() {
             <View style={styles.listHeader}>
               <Text style={[styles.listTitle, { color: colors.foreground }]}>Travel History</Text>
             </View>
+
+            {/* Home city pinned card */}
+            {homeCityVisit && (
+              <View style={styles.homeCitySection}>
+                <HomeCityCard cityVisit={homeCityVisit} onPhotoPress={openViewer} />
+              </View>
+            )}
+
             <View style={styles.statsContainer}>
-              <TravelStats countries={countries} />
+              <TravelStats countries={tripCountries} photos={tripPhotos} />
             </View>
-            <View style={[styles.historyHeading, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.historyTitle, { color: colors.mutedForeground }]}>BY COUNTRY</Text>
-            </View>
+
+            {sections.length > 0 && (
+              <View style={[styles.historyHeading, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.historyTitle, { color: colors.mutedForeground }]}>BY COUNTRY</Text>
+              </View>
+            )}
           </View>
         }
       />
+
+      {viewerState && (
+        <PhotoViewer
+          uris={viewerState.uris}
+          initialIndex={viewerState.index}
+          onClose={() => setViewerState(null)}
+        />
+      )}
     </View>
   );
 }
@@ -322,8 +546,32 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
   refreshBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   refreshBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+
   listHeader: { paddingHorizontal: 20, paddingBottom: 14 },
   listTitle: { fontSize: 28, fontFamily: "Inter_700Bold" },
+
+  homeCitySection: { paddingHorizontal: 16, marginBottom: 4 },
+  homeCityCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  homeCityCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  homeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  homeBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
+  homeCityMeta: { flex: 1 },
+  homeCityCardName: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  homeCityCardCountry: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 1 },
+  homeCityNote: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+
   statsContainer: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
   statsRow: { flexDirection: "row", gap: 10 },
   statCard: { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 10, alignItems: "center", gap: 4 },
@@ -345,8 +593,10 @@ const styles = StyleSheet.create({
   streakFire: { fontSize: 28 },
   streakTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   streakSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+
   historyHeading: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8, borderBottomWidth: 1, marginTop: 4 },
   historyTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1 },
+
   sectionHeader: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   sectionHeaderContent: { flex: 1 },
   countryName: { fontSize: 18, fontFamily: "Inter_700Bold" },
@@ -354,10 +604,15 @@ const styles = StyleSheet.create({
   countryStats: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginTop: 2 },
   countryStatText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   statDot: { fontSize: 12 },
-  cityRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12, gap: 10, borderBottomWidth: 1, marginHorizontal: 16 },
+
+  cityBlock: { borderBottomWidth: 1, marginHorizontal: 16 },
+  cityRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 4, paddingTop: 12, paddingBottom: 8, gap: 10 },
   cityInfo: { flex: 1 },
   cityName: { fontSize: 15, fontFamily: "Inter_500Medium" },
   cityDates: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
   photoBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
   photoCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
+
+  photoStrip: { paddingHorizontal: 4, paddingBottom: 10, gap: 6 },
+  thumb: { width: 64, height: 64, borderRadius: 8 },
 });

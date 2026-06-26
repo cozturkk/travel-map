@@ -38,6 +38,7 @@ export interface CityVisit {
   firstDate: number;
   lastDate: number;
   previewUri: string;
+  photoUris: string[];
 }
 
 export interface CountryVisit {
@@ -120,6 +121,7 @@ function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
         firstDate,
         lastDate,
         previewUri: sortedByTime[0].uri,
+        photoUris: sortedByTime.slice(0, 10).map((p) => p.uri),
       });
     }
 
@@ -258,8 +260,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
         const [lat, lon] = key.split(",").map(Number);
         try {
           const results = await Location.reverseGeocodeAsync(
-            { latitude: lat, longitude: lon },
-            { useGoogleMaps: false }
+            { latitude: lat, longitude: lon }
           );
           if (results[0]) {
             const { country, city, region, subregion } = results[0];
