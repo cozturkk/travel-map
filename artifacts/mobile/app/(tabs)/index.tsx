@@ -31,7 +31,6 @@ import { buildMonthMap, calcStreaks } from "@/utils/travelStats";
 import { CC_JS, countryToFlag } from "@/utils/countryFlags";
 
 const MANUAL_VISITED_KEY = "manual_visited_v1";
-const LABEL_ZOOM_THRESHOLD = 4;
 const TOTAL_COUNTRIES = 195;
 
 function formatDateRange(first: number, last: number) {
@@ -41,86 +40,154 @@ function formatDateRange(first: number, last: number) {
   return f === l ? f : `${f} – ${l}`;
 }
 
-const buildGlobeHTML = (labelThreshold: number) => `<!DOCTYPE html>
+const buildGlobeHTML = (): string => `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:100%;height:100%;background:#020C18;display:flex;align-items:center;justify-content:center;overflow:hidden}
-    #globe-wrap{position:relative;width:min(96vw,96vh);height:min(96vw,96vh);border-radius:50%;overflow:hidden;box-shadow:0 0 0 1.5px rgba(56,189,248,0.25),0 0 35px 8px rgba(56,189,248,0.13),0 0 80px 20px rgba(14,165,233,0.07)}
-    #map{width:100%;height:100%;background:#0F172A}
-    #atmo{position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 50%,transparent 58%,rgba(2,12,24,0.92) 100%);pointer-events:none;z-index:500}
-    .country-label{background:transparent!important;border:none!important;box-shadow:none!important;color:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:10px;font-weight:700;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;pointer-events:none;display:none;letter-spacing:.04em;text-transform:uppercase}
-    #map.show-labels .country-label{display:block}
-    .leaflet-marker-icon,.leaflet-marker-shadow{background:none!important;border:none!important;box-shadow:none!important}
-    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94A3B8;font-family:sans-serif;font-size:13px;z-index:999;pointer-events:none;text-align:center}
+    html,body{width:100%;height:100%;background:#000815;overflow:hidden}
+    #globe-el{width:100vw;height:100vh}
+    #loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#94A3B8;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;text-align:center;pointer-events:none;z-index:10}
   </style>
 </head>
 <body>
-<div id="globe-wrap">
-  <div id="loading">Loading…</div>
-  <div id="map"></div>
-  <div id="atmo"></div>
-</div>
+<div id="loading">Loading 3D globe…</div>
+<div id="globe-el"></div>
+<script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
 <script>
 var CC=${CC_JS};
-function codeToFlag(code){if(!code||code.length!==2)return'';return code.toUpperCase().split('').map(function(c){return String.fromCodePoint(c.charCodeAt(0)+127397);}).join('');}
-function countryFlag(name){return codeToFlag(CC[name]||'');}
-var visited={};var bucketList={};var layersByName={};var geojsonLayer=null;
-var flagGroup=L.layerGroup();
-function sendUp(msg){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(msg);else window.parent.postMessage(msg,'*');}catch(e){}}
-var map=L.map('map',{zoomControl:false,attributionControl:false,minZoom:1,maxZoom:12}).setView([20,10],2);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20}).addTo(map);
-flagGroup.addTo(map);
-map.on('zoomend',function(){var el=document.getElementById('map');if(map.getZoom()>=${labelThreshold})el.classList.add('show-labels');else el.classList.remove('show-labels');});
-function getStyle(f){var name=f.properties.ADMIN||f.properties.name||'';if(visited[name])return{fillColor:'#F59E0B',weight:0.5,opacity:0.7,color:'#D97706',fillOpacity:0.65};if(bucketList[name])return{fillColor:'#38BDF8',weight:0.5,opacity:0.7,color:'#0EA5E9',fillOpacity:0.5};return{fillColor:'#334155',weight:0.5,opacity:0.6,color:'#475569',fillOpacity:0.25};}
-function applyStyles(){if(geojsonLayer)geojsonLayer.setStyle(getStyle);}
-function refreshFlagMarkers(){
-  flagGroup.clearLayers();
-  for(var name in visited){
-    if(!visited[name])continue;
-    var layer=layersByName[name];
-    if(!layer)continue;
-    var flag=countryFlag(name);
-    if(!flag)continue;
-    try{
-      var center=layer.getBounds().getCenter();
-      L.marker(center,{
-        icon:L.divIcon({html:'<div style="font-size:18px;line-height:1;text-shadow:0 1px 4px rgba(0,0,0,0.9);filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">'+flag+'</div>',className:'',iconSize:[22,22],iconAnchor:[11,11]}),
-        interactive:false,zIndexOffset:100
-      }).addTo(flagGroup);
-    }catch(e){}
-  }
+function codeToFlag(code){if(!code||code.length!==2)return'';return code.toUpperCase().split('').map(function(c){return String.fromCodePoint(c.charCodeAt(0)+127397)}).join('')}
+function lookupFlag(name){
+  if(!name)return'';
+  var code=CC[name];
+  if(code)return codeToFlag(code);
+  // case-insensitive
+  var lo=name.toLowerCase();
+  var keys=Object.keys(CC);
+  for(var i=0;i<keys.length;i++){if(keys[i].toLowerCase()===lo)return codeToFlag(CC[keys[i]]);}
+  // strip prefix
+  var stripped=name.replace(/^(republic of |the |kingdom of |democratic republic of )/i,'').trim();
+  if(CC[stripped])return codeToFlag(CC[stripped]);
+  // partial
+  for(var j=0;j<keys.length;j++){var kl=keys[j].toLowerCase();if(keys[j].length>=5&&lo.indexOf(kl)!==-1)return codeToFlag(CC[keys[j]]);if(lo.length>=5&&kl.indexOf(lo)!==-1)return codeToFlag(CC[keys[j]]);}
+  return'';
 }
-function animateReveal(layer){var steps=[{fc:'#94A3B8',fo:0.6,c:'#94A3B8'},{fc:'#F59E0B',fo:0.9,c:'#F59E0B'},{fc:'#94A3B8',fo:0.5,c:'#94A3B8'},{fc:'#F59E0B',fo:0.9,c:'#F59E0B'},{fc:'#94A3B8',fo:0.4,c:'#94A3B8'},{fc:'#F59E0B',fo:1.0,c:'#F59E0B'},{fc:'#F59E0B',fo:0.85,c:'#D97706'},{fc:'#F59E0B',fo:0.65,c:'#D97706'}];var i=0;var t=setInterval(function(){if(i>=steps.length){clearInterval(t);return;}layer.setStyle({fillColor:steps[i].fc,fillOpacity:steps[i].fo,color:steps[i].c,weight:1.5});i++;},90);}
-function animateBucketAdd(layer){var steps=[{fc:'#7DD3FC',fo:0.9,c:'#38BDF8'},{fc:'#38BDF8',fo:0.4,c:'#0EA5E9'},{fc:'#7DD3FC',fo:0.9,c:'#38BDF8'},{fc:'#38BDF8',fo:0.5,c:'#0EA5E9'}];var i=0;var t=setInterval(function(){if(i>=steps.length){clearInterval(t);layer.setStyle(getStyle(layer.feature));return;}layer.setStyle({fillColor:steps[i].fc,fillOpacity:steps[i].fo,color:steps[i].c,weight:1.5});i++;},120);}
+function sendUp(msg){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(msg);else window.parent.postMessage(msg,'*')}catch(e){}}
+
+var visited={},bucketList={},centroids={},world=null;
+
+function computeCentroid(f){
+  var lats=[],lngs=[];
+  function walk(c){if(!c||!c.length)return;if(typeof c[0]==='number'){lngs.push(c[0]);lats.push(c[1]);}else c.forEach(walk);}
+  if(f.geometry){
+    if(f.geometry.type==='Polygon')f.geometry.coordinates.forEach(function(r){r.forEach(walk)});
+    else if(f.geometry.type==='MultiPolygon')f.geometry.coordinates.forEach(function(p){p.forEach(function(r){r.forEach(walk)})});
+  }
+  if(!lats.length)return null;
+  return{lat:lats.reduce(function(a,b){return a+b},0)/lats.length,lng:lngs.reduce(function(a,b){return a+b},0)/lngs.length};
+}
+
+function capColor(f){
+  var n=f.properties.ADMIN||f.properties.name||'';
+  if(visited[n])return 'rgba(245,158,11,0.82)';
+  if(bucketList[n])return 'rgba(56,189,248,0.55)';
+  return 'rgba(51,65,85,0.38)';
+}
+function sideColor(){return 'rgba(0,0,0,0.08)'}
+function strokeColor(){return 'rgba(71,85,105,0.6)'}
+function polyAlt(f){var n=f.properties.ADMIN||f.properties.name||'';return visited[n]?0.028:0;}
+
+function flagsData(){
+  return Object.keys(visited).filter(function(n){return visited[n]}).map(function(n){
+    var c=centroids[n];var flag=lookupFlag(n);
+    if(!c||!flag)return null;
+    return{name:n,flag:flag,lat:c.lat,lng:c.lng};
+  }).filter(Boolean);
+}
+
+function updateGlobe(){
+  if(!world)return;
+  world.polygonCapColor(capColor).polygonAltitude(polyAlt);
+  world.htmlElementsData(flagsData());
+}
+
+var el=document.getElementById('globe-el');
+world=Globe({animateIn:false})(el)
+  .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+  .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+  .atmosphereColor('rgba(56,189,248,0.65)')
+  .atmosphereAltitude(0.14)
+  .polygonCapColor(capColor)
+  .polygonSideColor(sideColor)
+  .polygonStrokeColor(strokeColor)
+  .polygonAltitude(polyAlt)
+  .htmlElementsData([])
+  .htmlLat(function(d){return d.lat})
+  .htmlLng(function(d){return d.lng})
+  .htmlAltitude(0.035)
+  .htmlElement(function(d){
+    var div=document.createElement('div');
+    div.innerHTML=d.flag;
+    div.style.cssText='font-size:18px;line-height:1;pointer-events:none;text-shadow:0 1px 5px rgba(0,0,0,0.95),0 0 8px rgba(0,0,0,0.7);';
+    return div;
+  })
+  .onPolygonClick(function(polygon,evt){
+    var n=polygon.properties.ADMIN||polygon.properties.name||'';
+    if(!n)return;
+    sendUp(JSON.stringify({type:'countryTap',country:n,isVisited:!!visited[n],inBucket:!!bucketList[n]}));
+  });
+
+/* Auto-rotate */
+world.controls().autoRotate=true;
+world.controls().autoRotateSpeed=0.38;
+world.controls().enableDamping=true;
+world.controls().dampingFactor=0.08;
+world.controls().enableZoom=true;
+var resumeT;
+function pauseRotate(){world.controls().autoRotate=false;clearTimeout(resumeT);}
+function scheduleResume(){clearTimeout(resumeT);resumeT=setTimeout(function(){world.controls().autoRotate=true;},5000);}
+el.addEventListener('touchstart',pauseRotate,{passive:true});
+el.addEventListener('touchend',scheduleResume,{passive:true});
+el.addEventListener('mousedown',pauseRotate);
+el.addEventListener('mouseup',scheduleResume);
+
+/* Load country data */
 fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
-  .then(function(r){return r.json();})
+  .then(function(r){return r.json()})
   .then(function(data){
-    geojsonLayer=L.geoJSON(data,{style:getStyle,onEachFeature:function(f,layer){var name=f.properties.ADMIN||f.properties.name||'';if(!name)return;layersByName[name]=layer;layer.bindTooltip(name,{permanent:true,direction:'center',className:'country-label',interactive:false});layer.closeTooltip();layer.on('click',function(e){L.DomEvent.stopPropagation(e);sendUp(JSON.stringify({type:'countryTap',country:name,isVisited:!!visited[name],inBucket:!!bucketList[name]}));});}}).addTo(map);
     document.getElementById('loading').style.display='none';
-    applyStyles();
-    refreshFlagMarkers();
+    data.features.forEach(function(f){
+      var n=f.properties.ADMIN||f.properties.name||'';
+      if(n)centroids[n]=computeCentroid(f);
+    });
+    world.polygonsData(data.features);
+    updateGlobe();
     sendUp(JSON.stringify({type:'mapReady'}));
   })
-  .catch(function(){document.getElementById('loading').textContent='Map unavailable';sendUp(JSON.stringify({type:'mapError'}));});
-function handleMsg(e){try{var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
-  if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});applyStyles();refreshFlagMarkers();}
-  else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});applyStyles();}
-  else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];var lv=layersByName[d.country];if(lv)animateReveal(lv);else applyStyles();setTimeout(refreshFlagMarkers,800);}
-  else if(d.type==='markBucket'){bucketList[d.country]=true;var lb=layersByName[d.country];if(lb)animateBucketAdd(lb);else applyStyles();}
-  else if(d.type==='unmarkBucket'){delete bucketList[d.country];applyStyles();}
-  else if(d.type==='zoomCountry'){var zt=layersByName[d.country];if(zt&&zt.getBounds)map.fitBounds(zt.getBounds(),{padding:[30,30]});}
-}catch(err){}}
-document.addEventListener('message',handleMsg);window.addEventListener('message',handleMsg);
+  .catch(function(){
+    document.getElementById('loading').textContent='Globe unavailable – check connection';
+    sendUp(JSON.stringify({type:'mapError'}));
+  });
+
+function handleMsg(e){
+  try{
+    var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
+    if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});updateGlobe();}
+    else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});updateGlobe();}
+    else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];updateGlobe();}
+    else if(d.type==='markBucket'){bucketList[d.country]=true;updateGlobe();}
+    else if(d.type==='unmarkBucket'){delete bucketList[d.country];updateGlobe();}
+    else if(d.type==='zoomCountry'){var c=centroids[d.country];if(c&&world)world.pointOfView({lat:c.lat,lng:c.lng,altitude:1.6},1000);}
+  }catch(err){}
+}
+document.addEventListener('message',handleMsg);
+window.addEventListener('message',handleMsg);
 </script>
 </body>
 </html>`;
 
-const GLOBE_HTML = buildGlobeHTML(LABEL_ZOOM_THRESHOLD);
+const GLOBE_HTML = buildGlobeHTML();
 
 const WebIframe = React.memo(function WebIframe({
   srcDoc, iframeRef,

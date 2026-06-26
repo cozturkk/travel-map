@@ -292,12 +292,12 @@ function ChronoCityItem({
       <View style={styles.chronoRow}>
         <Text style={styles.chronoFlag}>{flag}</Text>
         <View style={styles.chronoInfo}>
-          <Text style={[styles.chronoLocation, { color: colors.foreground }]}>
-            {item.country}
-            <Text style={[styles.chronoCityDot, { color: colors.mutedForeground }]}> · </Text>
-            <Text style={[styles.chronoCity, { color: colors.foreground }]}>{item.city}</Text>
+          <Text style={[styles.chronoLine, { color: colors.foreground }]} numberOfLines={2}>
+            <Text style={styles.chronoCountry}>{item.country}</Text>
+            <Text style={{ color: colors.mutedForeground }}> · </Text>
+            <Text>{item.city}</Text>
+            <Text style={{ color: colors.mutedForeground }}> — {dateStr}</Text>
           </Text>
-          <Text style={[styles.chronoDate, { color: colors.mutedForeground }]}>{dateStr}</Text>
         </View>
         <View style={[styles.photoBadge, { backgroundColor: colors.muted }]}>
           <Ionicons name="camera" size={11} color={colors.mutedForeground} />
@@ -531,14 +531,12 @@ const styles = StyleSheet.create({
 
   // Chrono item
   chronoBlock: { borderBottomWidth: 1, marginHorizontal: 16, paddingVertical: 0 },
-  chronoRow: { flexDirection: "row", alignItems: "center", paddingTop: 12, paddingBottom: 8, gap: 10 },
-  chronoFlag: { fontSize: 24, lineHeight: 28 },
+  chronoRow: { flexDirection: "row", alignItems: "flex-start", paddingTop: 12, paddingBottom: 8, gap: 10 },
+  chronoFlag: { fontSize: 24, lineHeight: 30, paddingTop: 1 },
   chronoInfo: { flex: 1 },
-  chronoLocation: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  chronoCityDot: { fontSize: 15, fontFamily: "Inter_400Regular" },
-  chronoCity: { fontSize: 15, fontFamily: "Inter_400Regular" },
-  chronoDate: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  photoBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
+  chronoLine: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 21 },
+  chronoCountry: { fontFamily: "Inter_600SemiBold" },
+  photoBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, marginTop: 2 },
   photoCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
 
   photoStrip: { paddingHorizontal: 4, paddingBottom: 10, gap: 6 },
