@@ -68,7 +68,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v2";
+const CACHE_KEY = "travel_data_v3";
 const MAX_PHOTOS = 2000;
 const BATCH_SIZE = 20;
 
@@ -80,7 +80,7 @@ function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
     const city =
       photo.city ??
       photo.region ??
-      (photo.latitude != null && photo.longitude != null
+      (typeof photo.latitude === "number" && typeof photo.longitude === "number"
         ? `${photo.latitude.toFixed(1)}, ${photo.longitude.toFixed(1)}`
         : "Unknown location");
 
@@ -219,12 +219,14 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           batch.map((a) => MediaLibrary.getAssetInfoAsync(a))
         );
         for (const info of infos) {
-          if (info.location?.latitude && info.location?.longitude) {
+          const lat = Number(info.location?.latitude);
+          const lon = Number(info.location?.longitude);
+          if (isFinite(lat) && isFinite(lon) && (lat !== 0 || lon !== 0)) {
             rawPhotos.push({
               id: info.id,
               uri: info.uri,
-              latitude: info.location.latitude,
-              longitude: info.location.longitude,
+              latitude: lat,
+              longitude: lon,
               modificationTime: info.modificationTime,
             });
           }
@@ -239,7 +241,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
       // Bucket unique locations (1-decimal-place ≈ 11km accuracy)
       const locationBuckets = new Map<string, PhotoAsset[]>();
       for (const photo of rawPhotos) {
-        if (photo.latitude == null || photo.longitude == null) continue;
+        if (typeof photo.latitude !== "number" || typeof photo.longitude !== "number") continue;
         const key = `${photo.latitude.toFixed(1)},${photo.longitude.toFixed(1)}`;
         if (!locationBuckets.has(key)) locationBuckets.set(key, []);
         locationBuckets.get(key)!.push(photo);
