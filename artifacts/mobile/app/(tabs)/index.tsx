@@ -90,13 +90,13 @@ function computeCentroid(f){
 
 function capColor(f){
   var n=f.properties.ADMIN||f.properties.name||'';
-  if(visited[n])return 'rgba(245,158,11,0.82)';
-  if(bucketList[n])return 'rgba(56,189,248,0.55)';
-  return 'rgba(51,65,85,0.38)';
+  if(visited[n])return 'rgba(255,178,0,0.92)';
+  if(bucketList[n])return 'rgba(56,189,248,0.65)';
+  return 'rgba(88,110,145,0.68)';
 }
-function sideColor(){return 'rgba(0,0,0,0.08)'}
-function strokeColor(){return 'rgba(71,85,105,0.6)'}
-function polyAlt(f){var n=f.properties.ADMIN||f.properties.name||'';return visited[n]?0.028:0;}
+function sideColor(){return 'rgba(0,0,0,0.12)'}
+function strokeColor(){return 'rgba(110,140,180,0.45)'}
+function polyAlt(f){var n=f.properties.ADMIN||f.properties.name||'';return visited[n]?0.028:0.003;}
 
 function flagsData(){
   return Object.keys(visited).filter(function(n){return visited[n]}).map(function(n){
@@ -132,6 +132,7 @@ world=Globe({animateIn:false})(el)
     div.style.cssText='font-size:18px;line-height:1;pointer-events:none;text-shadow:0 1px 5px rgba(0,0,0,0.95),0 0 8px rgba(0,0,0,0.7);';
     return div;
   })
+  .polygonTransitionDuration(0)
   .onPolygonClick(function(polygon,evt){
     var n=polygon.properties.ADMIN||polygon.properties.name||'';
     if(!n)return;
