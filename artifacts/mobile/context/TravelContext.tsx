@@ -69,7 +69,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v3";
+const CACHE_KEY = "travel_data_v4";
 const MAX_PHOTOS = 2000;
 const BATCH_SIZE = 20;
 
@@ -224,9 +224,11 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           const lat = Number(info.location?.latitude);
           const lon = Number(info.location?.longitude);
           if (isFinite(lat) && isFinite(lon) && (lat !== 0 || lon !== 0)) {
+            // Prefer localUri (file://) over uri (ph://) — Image cannot load ph:// URLs
+            const displayUri = info.localUri ?? info.uri;
             rawPhotos.push({
               id: info.id,
-              uri: info.uri,
+              uri: displayUri,
               latitude: lat,
               longitude: lon,
               modificationTime: info.modificationTime,
