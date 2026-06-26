@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { CityVisit, CountryVisit, PhotoAsset, useTravel } from "@/context/TravelContext";
 import { useHomeCity } from "@/context/HomeCityContext";
+import { countryToFlag } from "@/utils/countryFlags";
 import PermissionGate from "@/components/PermissionGate";
 import { buildMonthMap, calcStreaks, getStreakPeriod } from "@/utils/travelStats";
 
@@ -33,16 +34,8 @@ function fmtMonthKey(key: string): string {
   });
 }
 
-function formatDateRange(first: number, last: number) {
-  const f = new Date(first);
-  const l = new Date(last);
-  const fMonth = f.toLocaleDateString("en-US", { month: "short" });
-  const lMonth = l.toLocaleDateString("en-US", { month: "short" });
-  const fYear = f.getFullYear();
-  const lYear = l.getFullYear();
-  if (fYear === lYear && fMonth === lMonth) return `${fMonth} ${fYear}`;
-  if (fYear === lYear) return `${fMonth} – ${lMonth} ${fYear}`;
-  return `${fMonth} ${fYear} – ${lMonth} ${lYear}`;
+function fmtShortDate(ts: number) {
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 // ─── Photo Viewer ────────────────────────────────────────────────────────────
@@ -66,12 +59,9 @@ function PhotoViewer({
           <TouchableOpacity onPress={onClose} hitSlop={16} style={pvStyles.closeBtn}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
-          <Text style={pvStyles.counter}>
-            {currentIndex + 1} / {uris.length}
-          </Text>
+          <Text style={pvStyles.counter}>{currentIndex + 1} / {uris.length}</Text>
           <View style={{ width: 48 }} />
         </View>
-
         <FlatList
           data={uris}
           keyExtractor={(_, i) => String(i)}
@@ -79,21 +69,12 @@ function PhotoViewer({
           pagingEnabled
           initialScrollIndex={initialIndex}
           showsHorizontalScrollIndicator={false}
-          getItemLayout={(_, index) => ({
-            length: width,
-            offset: width * index,
-            index,
-          })}
+          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
           onMomentumScrollEnd={(e) => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / width);
-            setCurrentIndex(idx);
+            setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / width));
           }}
           renderItem={({ item }) => (
-            <Image
-              source={{ uri: item }}
-              style={{ width, height: height - 140 }}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: item }} style={{ width, height: height - 140 }} resizeMode="contain" />
           )}
         />
       </View>
@@ -102,25 +83,9 @@ function PhotoViewer({
 }
 
 const pvStyles = StyleSheet.create({
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  closeBtn: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  counter: {
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
+  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 56, paddingHorizontal: 16, paddingBottom: 16 },
+  closeBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
+  counter: { color: "#fff", fontSize: 15, fontFamily: "Inter_500Medium" },
 });
 
 // ─── Heatmap ────────────────────────────────────────────────────────────────
@@ -170,19 +135,11 @@ function buildYearGrid(monthMap: Map<string, number>): YearRow[] {
   return rows;
 }
 
-function TravelStats({
-  countries,
-  photos,
-}: {
-  countries: CountryVisit[];
-  photos: PhotoAsset[];
-}) {
+function TravelStats({ countries, photos }: { countries: CountryVisit[]; photos: PhotoAsset[] }) {
   const colors = useColors();
-
   const monthMap = useMemo(() => buildMonthMap(photos), [photos]);
   const streaks = useMemo(() => calcStreaks(monthMap), [monthMap]);
   const heatmap = useMemo(() => buildYearGrid(monthMap), [monthMap]);
-
   const totalCities = countries.reduce((a, c) => a + c.cities.length, 0);
   const stats = [
     { value: countries.length, label: "Countries", icon: "globe" as const, color: colors.accent },
@@ -199,9 +156,7 @@ function TravelStats({
             <Ionicons name={s.icon} size={16} color={s.color} />
             <Text style={[styles.statNum, { color: colors.foreground }]}>
               {s.value}
-              {s.suffix && (
-                <Text style={[styles.statSuffix, { color: colors.mutedForeground }]}> {s.suffix}</Text>
-              )}
+              {s.suffix && <Text style={[styles.statSuffix, { color: colors.mutedForeground }]}> {s.suffix}</Text>}
             </Text>
             <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
           </View>
@@ -216,14 +171,12 @@ function TravelStats({
               {streaks.total} travel {streaks.total === 1 ? "month" : "months"}
             </Text>
           </View>
-
           <View style={styles.heatGrid}>
             <View style={styles.yearLabel} />
             {MONTH_LABELS.map((l, i) => (
               <Text key={i} style={[styles.monthLabel, { color: colors.mutedForeground }]}>{l}</Text>
             ))}
           </View>
-
           {heatmap.map((row) => (
             <View key={row.year} style={styles.heatGrid}>
               <Text style={[styles.yearLabel, { color: colors.mutedForeground }]}>{row.year}</Text>
@@ -232,7 +185,6 @@ function TravelStats({
               ))}
             </View>
           ))}
-
           <View style={styles.legend}>
             <Text style={[styles.legendLabel, { color: colors.mutedForeground }]}>Less</Text>
             {["#334155", "#92400E", "#B45309", "#F59E0B"].map((c) => (
@@ -240,31 +192,22 @@ function TravelStats({
             ))}
             <Text style={[styles.legendLabel, { color: colors.mutedForeground }]}>More</Text>
           </View>
-
           {streaks.current > 1 && (
             <View style={[styles.streakBadge, { backgroundColor: colors.background }]}>
               <Text style={styles.streakFire}>🔥</Text>
               <View>
-                <Text style={[styles.streakTitle, { color: colors.foreground }]}>
-                  {streaks.current}-month streak!
-                </Text>
-                <Text style={[styles.streakSub, { color: colors.mutedForeground }]}>
-                  You've traveled {streaks.current} months in a row
-                </Text>
+                <Text style={[styles.streakTitle, { color: colors.foreground }]}>{streaks.current}-month streak!</Text>
+                <Text style={[styles.streakSub, { color: colors.mutedForeground }]}>Traveled {streaks.current} months in a row</Text>
               </View>
             </View>
           )}
-
           {streaks.current <= 1 && streaks.longest > 1 && (
             <View style={[styles.streakBadge, { backgroundColor: colors.background }]}>
               <Text style={styles.streakFire}>⚡</Text>
               <View>
-                <Text style={[styles.streakTitle, { color: colors.foreground }]}>
-                  Best streak: {streaks.longest} months
-                </Text>
+                <Text style={[styles.streakTitle, { color: colors.foreground }]}>Best: {streaks.longest} months</Text>
                 <Text style={[styles.streakSub, { color: colors.mutedForeground }]}>
-                  {fmtMonthKey(getStreakPeriod(monthMap).start)} –{" "}
-                  {fmtMonthKey(getStreakPeriod(monthMap).end)}
+                  {fmtMonthKey(getStreakPeriod(monthMap).start)} – {fmtMonthKey(getStreakPeriod(monthMap).end)}
                 </Text>
               </View>
             </View>
@@ -275,89 +218,18 @@ function TravelStats({
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Photo Strip ─────────────────────────────────────────────────────────────
 
-function PhotoStrip({
-  uris,
-  onPress,
-}: {
-  uris: string[];
-  onPress: (index: number) => void;
-}) {
+function PhotoStrip({ uris, onPress }: { uris: string[]; onPress: (i: number) => void }) {
   if (uris.length === 0) return null;
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.photoStrip}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
       {uris.map((uri, idx) => (
-        <TouchableOpacity
-          key={idx}
-          activeOpacity={0.8}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onPress(idx);
-          }}
-        >
+        <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(idx); }}>
           <Image source={{ uri }} style={styles.thumb} />
         </TouchableOpacity>
       ))}
     </ScrollView>
-  );
-}
-
-function CityItem({
-  city,
-  onPhotoPress,
-}: {
-  city: CityVisit;
-  onPhotoPress: (uris: string[], index: number) => void;
-}) {
-  const colors = useColors();
-  return (
-    <View style={[styles.cityBlock, { borderBottomColor: colors.border }]}>
-      <View style={styles.cityRow}>
-        <Ionicons name="location-outline" size={14} color={colors.primary} />
-        <View style={styles.cityInfo}>
-          <Text style={[styles.cityName, { color: colors.foreground }]}>{city.city}</Text>
-          <Text style={[styles.cityDates, { color: colors.mutedForeground }]}>
-            {formatDateRange(city.firstDate, city.lastDate)}
-          </Text>
-        </View>
-        <View style={[styles.photoBadge, { backgroundColor: colors.muted }]}>
-          <Ionicons name="camera" size={11} color={colors.mutedForeground} />
-          <Text style={[styles.photoCount, { color: colors.mutedForeground }]}>{city.photoCount}</Text>
-        </View>
-      </View>
-      <PhotoStrip
-        uris={city.photoUris ?? []}
-        onPress={(idx) => onPhotoPress(city.photoUris ?? [], idx)}
-      />
-    </View>
-  );
-}
-
-function CountrySectionHeader({ country }: { country: CountryVisit }) {
-  const colors = useColors();
-  return (
-    <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-      <View style={styles.sectionHeaderContent}>
-        <Text style={[styles.countryName, { color: colors.foreground }]}>{country.country}</Text>
-        <Text style={[styles.countryMeta, { color: colors.mutedForeground }]}>
-          {formatDateRange(country.firstDate, country.lastDate)}
-        </Text>
-      </View>
-      <View style={[styles.countryStats, { backgroundColor: colors.muted }]}>
-        <Text style={[styles.countryStatText, { color: colors.accent }]}>
-          {country.cities.length} {country.cities.length === 1 ? "city" : "cities"}
-        </Text>
-        <Text style={[styles.statDot, { color: colors.border }]}>·</Text>
-        <Text style={[styles.countryStatText, { color: colors.mutedForeground }]}>
-          {country.photoCount} photos
-        </Text>
-      </View>
-    </View>
   );
 }
 
@@ -380,7 +252,7 @@ function HomeCityCard({
         </View>
         <View style={styles.homeCityMeta}>
           <Text style={[styles.homeCityCardName, { color: colors.foreground }]}>
-            {cityVisit.city}
+            {countryToFlag(cityVisit.country)} {cityVisit.city}
           </Text>
           <Text style={[styles.homeCityCardCountry, { color: colors.mutedForeground }]}>
             {cityVisit.country} · {cityVisit.photoCount} photos
@@ -398,6 +270,61 @@ function HomeCityCard({
   );
 }
 
+// ─── Chrono item ─────────────────────────────────────────────────────────────
+
+interface ChronoEntry extends CityVisit {
+  country: string;
+}
+
+function ChronoCityItem({
+  item,
+  onPhotoPress,
+}: {
+  item: ChronoEntry;
+  onPhotoPress: (uris: string[], index: number) => void;
+}) {
+  const colors = useColors();
+  const flag = countryToFlag(item.country);
+  const dateStr = fmtShortDate(item.lastDate);
+
+  return (
+    <View style={[styles.chronoBlock, { borderBottomColor: colors.border }]}>
+      <View style={styles.chronoRow}>
+        <Text style={styles.chronoFlag}>{flag}</Text>
+        <View style={styles.chronoInfo}>
+          <Text style={[styles.chronoLocation, { color: colors.foreground }]}>
+            {item.country}
+            <Text style={[styles.chronoCityDot, { color: colors.mutedForeground }]}> · </Text>
+            <Text style={[styles.chronoCity, { color: colors.foreground }]}>{item.city}</Text>
+          </Text>
+          <Text style={[styles.chronoDate, { color: colors.mutedForeground }]}>{dateStr}</Text>
+        </View>
+        <View style={[styles.photoBadge, { backgroundColor: colors.muted }]}>
+          <Ionicons name="camera" size={11} color={colors.mutedForeground} />
+          <Text style={[styles.photoCount, { color: colors.mutedForeground }]}>{item.photoCount}</Text>
+        </View>
+      </View>
+      <PhotoStrip
+        uris={item.photoUris ?? []}
+        onPress={(idx) => onPhotoPress(item.photoUris ?? [], idx)}
+      />
+    </View>
+  );
+}
+
+function YearHeader({ year }: { year: string }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.yearHeader, { backgroundColor: colors.background }]}>
+      <View style={[styles.yearLine, { backgroundColor: colors.border }]} />
+      <View style={[styles.yearPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.yearText, { color: colors.accent }]}>{year}</Text>
+      </View>
+      <View style={[styles.yearLine, { backgroundColor: colors.border }]} />
+    </View>
+  );
+}
+
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function ListTab() {
@@ -407,7 +334,6 @@ export default function ListTab() {
   const { homeCity } = useHomeCity();
 
   const [viewerState, setViewerState] = useState<{ uris: string[]; index: number } | null>(null);
-
   const openViewer = useCallback((uris: string[], index: number) => {
     setViewerState({ uris, index });
   }, []);
@@ -415,7 +341,6 @@ export default function ListTab() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
 
-  // Separate home city from trip countries
   const homeCityVisit = useMemo(() => {
     if (!homeCity) return null;
     const country = countries.find((c) => c.country === homeCity.country);
@@ -429,25 +354,37 @@ export default function ListTab() {
         if (c.country !== homeCity.country) return c;
         const filteredCities = c.cities.filter((ci) => ci.city !== homeCity.city);
         if (filteredCities.length === 0) return null;
-        return {
-          ...c,
-          cities: filteredCities,
-          photoCount: filteredCities.reduce((a, ci) => a + ci.photoCount, 0),
-        } as CountryVisit;
+        return { ...c, cities: filteredCities, photoCount: filteredCities.reduce((a, ci) => a + ci.photoCount, 0) } as CountryVisit;
       })
       .filter((c): c is CountryVisit => c !== null);
   }, [countries, homeCity]);
 
   const tripPhotos = useMemo(() => {
     if (!homeCity) return photos;
-    return photos.filter(
-      (p) => !(p.city === homeCity.city && p.country === homeCity.country)
-    );
+    return photos.filter((p) => !(p.city === homeCity.city && p.country === homeCity.country));
   }, [photos, homeCity]);
 
-  if (permissionGranted === false) return <PermissionGate />;
+  // Flatten all cities and sort chronologically (newest first)
+  const chronoEntries = useMemo<ChronoEntry[]>(() => {
+    return tripCountries
+      .flatMap((c) => c.cities.map((ci) => ({ ...ci, country: c.country })))
+      .sort((a, b) => b.lastDate - a.lastDate);
+  }, [tripCountries]);
 
-  const sections = tripCountries.map((c) => ({ country: c, data: c.cities, key: c.country }));
+  // Group by year
+  const sections = useMemo(() => {
+    const yearMap = new Map<number, ChronoEntry[]>();
+    for (const entry of chronoEntries) {
+      const year = new Date(entry.lastDate).getFullYear();
+      if (!yearMap.has(year)) yearMap.set(year, []);
+      yearMap.get(year)!.push(entry);
+    }
+    return Array.from(yearMap.entries())
+      .sort(([a], [b]) => b - a)
+      .map(([year, data]) => ({ year: String(year), data, key: String(year) }));
+  }, [chronoEntries]);
+
+  if (permissionGranted === false) return <PermissionGate />;
 
   if (isLoading && countries.length === 0) {
     return (
@@ -488,10 +425,10 @@ export default function ListTab() {
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.key}
-        renderItem={({ item }) => <CityItem city={item} onPhotoPress={openViewer} />}
-        renderSectionHeader={({ section }) => (
-          <CountrySectionHeader country={section.country} />
+        renderItem={({ item }) => (
+          <ChronoCityItem item={item} onPhotoPress={openViewer} />
         )}
+        renderSectionHeader={({ section }) => <YearHeader year={section.year} />}
         contentContainerStyle={{ paddingTop: topPad + 8, paddingBottom: insets.bottom + 80 }}
         stickySectionHeadersEnabled
         refreshControl={
@@ -503,7 +440,6 @@ export default function ListTab() {
               <Text style={[styles.listTitle, { color: colors.foreground }]}>Travel History</Text>
             </View>
 
-            {/* Home city pinned card */}
             {homeCityVisit && (
               <View style={styles.homeCitySection}>
                 <HomeCityCard cityVisit={homeCityVisit} onPhotoPress={openViewer} />
@@ -515,8 +451,10 @@ export default function ListTab() {
             </View>
 
             {sections.length > 0 && (
-              <View style={[styles.historyHeading, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.historyTitle, { color: colors.mutedForeground }]}>BY COUNTRY</Text>
+              <View style={styles.timelineLabel}>
+                <Text style={[styles.timelineLabelText, { color: colors.mutedForeground }]}>
+                  TIMELINE · {chronoEntries.length} {chronoEntries.length === 1 ? "CITY" : "CITIES"}
+                </Text>
               </View>
             )}
           </View>
@@ -551,21 +489,9 @@ const styles = StyleSheet.create({
   listTitle: { fontSize: 28, fontFamily: "Inter_700Bold" },
 
   homeCitySection: { paddingHorizontal: 16, marginBottom: 4 },
-  homeCityCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    gap: 10,
-  },
+  homeCityCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },
   homeCityCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  homeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
+  homeBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   homeBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
   homeCityMeta: { flex: 1 },
   homeCityCardName: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
@@ -594,22 +520,24 @@ const styles = StyleSheet.create({
   streakTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   streakSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
 
-  historyHeading: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8, borderBottomWidth: 1, marginTop: 4 },
-  historyTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1 },
+  timelineLabel: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 },
+  timelineLabelText: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1 },
 
-  sectionHeader: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  sectionHeaderContent: { flex: 1 },
-  countryName: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  countryMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
-  countryStats: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginTop: 2 },
-  countryStatText: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  statDot: { fontSize: 12 },
+  // Year header
+  yearHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, gap: 10 },
+  yearLine: { flex: 1, height: 1 },
+  yearPill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+  yearText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 
-  cityBlock: { borderBottomWidth: 1, marginHorizontal: 16 },
-  cityRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 4, paddingTop: 12, paddingBottom: 8, gap: 10 },
-  cityInfo: { flex: 1 },
-  cityName: { fontSize: 15, fontFamily: "Inter_500Medium" },
-  cityDates: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+  // Chrono item
+  chronoBlock: { borderBottomWidth: 1, marginHorizontal: 16, paddingVertical: 0 },
+  chronoRow: { flexDirection: "row", alignItems: "center", paddingTop: 12, paddingBottom: 8, gap: 10 },
+  chronoFlag: { fontSize: 24, lineHeight: 28 },
+  chronoInfo: { flex: 1 },
+  chronoLocation: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  chronoCityDot: { fontSize: 15, fontFamily: "Inter_400Regular" },
+  chronoCity: { fontSize: 15, fontFamily: "Inter_400Regular" },
+  chronoDate: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   photoBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
   photoCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
 

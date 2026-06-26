@@ -10,9 +10,11 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,9 +28,11 @@ import { useBucketList } from "@/context/BucketListContext";
 import PermissionGate from "@/components/PermissionGate";
 import ShareCard, { ShareStats } from "@/components/ShareCard";
 import { buildMonthMap, calcStreaks } from "@/utils/travelStats";
+import { CC_JS, countryToFlag } from "@/utils/countryFlags";
 
 const MANUAL_VISITED_KEY = "manual_visited_v1";
 const LABEL_ZOOM_THRESHOLD = 4;
+const TOTAL_COUNTRIES = 195;
 
 function formatDateRange(first: number, last: number) {
   const opts: Intl.DateTimeFormatOptions = { month: "short", year: "numeric" };
@@ -37,7 +41,7 @@ function formatDateRange(first: number, last: number) {
   return f === l ? f : `${f} – ${l}`;
 }
 
-const buildMapHTML = (labelThreshold: number) => `<!DOCTYPE html>
+const buildGlobeHTML = (labelThreshold: number) => `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -45,32 +49,52 @@ const buildMapHTML = (labelThreshold: number) => `<!DOCTYPE html>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body,html,#map{height:100%;width:100%;background:#0F172A}
-    .leaflet-container{background:#0F172A!important}
-    .country-label{
-      background:transparent!important;border:none!important;box-shadow:none!important;
-      color:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-      font-size:10px;font-weight:700;text-align:center;
-      text-shadow:0 1px 3px rgba(0,0,0,0.9),0 0 6px rgba(0,0,0,0.6);
-      white-space:nowrap;pointer-events:none;display:none;
-      letter-spacing:0.04em;text-transform:uppercase;
-    }
-    .leaflet-tooltip.country-label::before{display:none!important}
+    html,body{width:100%;height:100%;background:#020C18;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    #globe-wrap{position:relative;width:min(96vw,96vh);height:min(96vw,96vh);border-radius:50%;overflow:hidden;box-shadow:0 0 0 1.5px rgba(56,189,248,0.25),0 0 35px 8px rgba(56,189,248,0.13),0 0 80px 20px rgba(14,165,233,0.07)}
+    #map{width:100%;height:100%;background:#0F172A}
+    #atmo{position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 50%,transparent 58%,rgba(2,12,24,0.92) 100%);pointer-events:none;z-index:500}
+    .country-label{background:transparent!important;border:none!important;box-shadow:none!important;color:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:10px;font-weight:700;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;pointer-events:none;display:none;letter-spacing:.04em;text-transform:uppercase}
     #map.show-labels .country-label{display:block}
-    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94A3B8;font-family:sans-serif;font-size:13px;z-index:999;pointer-events:none}
+    .leaflet-marker-icon,.leaflet-marker-shadow{background:none!important;border:none!important;box-shadow:none!important}
+    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94A3B8;font-family:sans-serif;font-size:13px;z-index:999;pointer-events:none;text-align:center}
   </style>
 </head>
 <body>
-<div id="loading">Loading map…</div>
-<div id="map"></div>
+<div id="globe-wrap">
+  <div id="loading">Loading…</div>
+  <div id="map"></div>
+  <div id="atmo"></div>
+</div>
 <script>
+var CC=${CC_JS};
+function codeToFlag(code){if(!code||code.length!==2)return'';return code.toUpperCase().split('').map(function(c){return String.fromCodePoint(c.charCodeAt(0)+127397);}).join('');}
+function countryFlag(name){return codeToFlag(CC[name]||'');}
 var visited={};var bucketList={};var layersByName={};var geojsonLayer=null;
+var flagGroup=L.layerGroup();
 function sendUp(msg){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(msg);else window.parent.postMessage(msg,'*');}catch(e){}}
 var map=L.map('map',{zoomControl:false,attributionControl:false,minZoom:1,maxZoom:12}).setView([20,10],2);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20}).addTo(map);
+flagGroup.addTo(map);
 map.on('zoomend',function(){var el=document.getElementById('map');if(map.getZoom()>=${labelThreshold})el.classList.add('show-labels');else el.classList.remove('show-labels');});
-function getStyle(f){var name=f.properties.ADMIN||f.properties.name||'';if(visited[name])return{fillColor:'#F59E0B',weight:0.5,opacity:0.7,color:'#D97706',fillOpacity:0.65};if(bucketList[name])return{fillColor:'#38BDF8',weight:0.5,opacity:0.7,color:'#0EA5E9',fillOpacity:0.5};return{fillColor:'#334155',weight:0.5,opacity:0.7,color:'#475569',fillOpacity:0.3};}
+function getStyle(f){var name=f.properties.ADMIN||f.properties.name||'';if(visited[name])return{fillColor:'#F59E0B',weight:0.5,opacity:0.7,color:'#D97706',fillOpacity:0.65};if(bucketList[name])return{fillColor:'#38BDF8',weight:0.5,opacity:0.7,color:'#0EA5E9',fillOpacity:0.5};return{fillColor:'#334155',weight:0.5,opacity:0.6,color:'#475569',fillOpacity:0.25};}
 function applyStyles(){if(geojsonLayer)geojsonLayer.setStyle(getStyle);}
+function refreshFlagMarkers(){
+  flagGroup.clearLayers();
+  for(var name in visited){
+    if(!visited[name])continue;
+    var layer=layersByName[name];
+    if(!layer)continue;
+    var flag=countryFlag(name);
+    if(!flag)continue;
+    try{
+      var center=layer.getBounds().getCenter();
+      L.marker(center,{
+        icon:L.divIcon({html:'<div style="font-size:18px;line-height:1;text-shadow:0 1px 4px rgba(0,0,0,0.9);filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">'+flag+'</div>',className:'',iconSize:[22,22],iconAnchor:[11,11]}),
+        interactive:false,zIndexOffset:100
+      }).addTo(flagGroup);
+    }catch(e){}
+  }
+}
 function animateReveal(layer){var steps=[{fc:'#94A3B8',fo:0.6,c:'#94A3B8'},{fc:'#F59E0B',fo:0.9,c:'#F59E0B'},{fc:'#94A3B8',fo:0.5,c:'#94A3B8'},{fc:'#F59E0B',fo:0.9,c:'#F59E0B'},{fc:'#94A3B8',fo:0.4,c:'#94A3B8'},{fc:'#F59E0B',fo:1.0,c:'#F59E0B'},{fc:'#F59E0B',fo:0.85,c:'#D97706'},{fc:'#F59E0B',fo:0.65,c:'#D97706'}];var i=0;var t=setInterval(function(){if(i>=steps.length){clearInterval(t);return;}layer.setStyle({fillColor:steps[i].fc,fillOpacity:steps[i].fo,color:steps[i].c,weight:1.5});i++;},90);}
 function animateBucketAdd(layer){var steps=[{fc:'#7DD3FC',fo:0.9,c:'#38BDF8'},{fc:'#38BDF8',fo:0.4,c:'#0EA5E9'},{fc:'#7DD3FC',fo:0.9,c:'#38BDF8'},{fc:'#38BDF8',fo:0.5,c:'#0EA5E9'}];var i=0;var t=setInterval(function(){if(i>=steps.length){clearInterval(t);layer.setStyle(getStyle(layer.feature));return;}layer.setStyle({fillColor:steps[i].fc,fillOpacity:steps[i].fo,color:steps[i].c,weight:1.5});i++;},120);}
 fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
@@ -79,25 +103,56 @@ fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_
     geojsonLayer=L.geoJSON(data,{style:getStyle,onEachFeature:function(f,layer){var name=f.properties.ADMIN||f.properties.name||'';if(!name)return;layersByName[name]=layer;layer.bindTooltip(name,{permanent:true,direction:'center',className:'country-label',interactive:false});layer.closeTooltip();layer.on('click',function(e){L.DomEvent.stopPropagation(e);sendUp(JSON.stringify({type:'countryTap',country:name,isVisited:!!visited[name],inBucket:!!bucketList[name]}));});}}).addTo(map);
     document.getElementById('loading').style.display='none';
     applyStyles();
+    refreshFlagMarkers();
     sendUp(JSON.stringify({type:'mapReady'}));
   })
-  .catch(function(){document.getElementById('loading').textContent='Map unavailable – check connection';sendUp(JSON.stringify({type:'mapError'}));});
-function handleMsg(e){try{var d=typeof e.data==='string'?JSON.parse(e.data):e.data;if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});applyStyles();}else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});applyStyles();}else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];var lv=layersByName[d.country];if(lv)animateReveal(lv);else applyStyles();}else if(d.type==='markBucket'){bucketList[d.country]=true;var lb=layersByName[d.country];if(lb)animateBucketAdd(lb);else applyStyles();}else if(d.type==='unmarkBucket'){delete bucketList[d.country];applyStyles();}else if(d.type==='zoomCountry'){var zt=layersByName[d.country];if(zt&&zt.getBounds)map.fitBounds(zt.getBounds(),{padding:[30,30]});}}catch(err){}}
+  .catch(function(){document.getElementById('loading').textContent='Map unavailable';sendUp(JSON.stringify({type:'mapError'}));});
+function handleMsg(e){try{var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
+  if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});applyStyles();refreshFlagMarkers();}
+  else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});applyStyles();}
+  else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];var lv=layersByName[d.country];if(lv)animateReveal(lv);else applyStyles();setTimeout(refreshFlagMarkers,800);}
+  else if(d.type==='markBucket'){bucketList[d.country]=true;var lb=layersByName[d.country];if(lb)animateBucketAdd(lb);else applyStyles();}
+  else if(d.type==='unmarkBucket'){delete bucketList[d.country];applyStyles();}
+  else if(d.type==='zoomCountry'){var zt=layersByName[d.country];if(zt&&zt.getBounds)map.fitBounds(zt.getBounds(),{padding:[30,30]});}
+}catch(err){}}
 document.addEventListener('message',handleMsg);window.addEventListener('message',handleMsg);
 </script>
 </body>
 </html>`;
 
-const MAP_HTML = buildMapHTML(LABEL_ZOOM_THRESHOLD);
+const GLOBE_HTML = buildGlobeHTML(LABEL_ZOOM_THRESHOLD);
 
 const WebIframe = React.memo(function WebIframe({
   srcDoc, iframeRef,
 }: { srcDoc: string; iframeRef: React.MutableRefObject<any> }) {
   return React.createElement("iframe", {
     ref: iframeRef, srcDoc,
-    style: { width: "100%", height: "100%", border: "none", display: "block", background: "#0F172A" },
+    style: { width: "100%", height: "100%", border: "none", display: "block", background: "#020C18" },
   }) as any;
 });
+
+// ─── Stat cards ──────────────────────────────────────────────────────────────
+
+function BigStatCard({
+  value, label, icon, bg,
+}: { value: string | number; label: string; icon: string; bg: string }) {
+  return (
+    <View style={[bigCard.card, { backgroundColor: bg }]}>
+      <Text style={bigCard.icon}>{icon}</Text>
+      <Text style={bigCard.value}>{value}</Text>
+      <Text style={bigCard.label}>{label}</Text>
+    </View>
+  );
+}
+
+const bigCard = StyleSheet.create({
+  card: { flex: 1, borderRadius: 20, padding: 18, minHeight: 130, justifyContent: "flex-end", overflow: "hidden" },
+  icon: { fontSize: 52, position: "absolute", top: 10, right: 10, opacity: 0.35 },
+  value: { fontSize: 44, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 48 },
+  label: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 2 },
+});
+
+// ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function MapTab() {
   const colors = useColors();
@@ -115,7 +170,6 @@ export default function MapTab() {
     [visitedCountryNames, manuallyVisited]
   );
 
-  // Share card state
   const [shareVisible, setShareVisible] = useState(false);
   const travelMonthMap = useMemo(() => buildMonthMap(photos), [photos]);
   const travelStreaks = useMemo(() => calcStreaks(travelMonthMap), [travelMonthMap]);
@@ -127,7 +181,6 @@ export default function MapTab() {
     months: travelStreaks.total,
   }), [allVisited.length, bucketList.length, travelStreaks]);
 
-  // Modals
   const [detailCountry, setDetailCountry] = useState<CountryVisit | null>(null);
   const [detailModal, setDetailModal] = useState(false);
   const [confirmCountry, setConfirmCountry] = useState<string | null>(null);
@@ -139,6 +192,10 @@ export default function MapTab() {
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
+  const { height: SH } = Dimensions.get("window");
+  const GLOBE_H = Math.round(SH * 0.48);
+
+  const pct = Math.round((allVisited.length / TOTAL_COUNTRIES) * 100);
 
   useEffect(() => {
     AsyncStorage.getItem(MANUAL_VISITED_KEY).then((v) => {
@@ -239,75 +296,144 @@ export default function MapTab() {
   if (permissionGranted === false) return <PermissionGate />;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.mapContainer}>
+    <View style={[styles.container, { backgroundColor: "#020C18" }]}>
+
+      {/* ── Globe section ── */}
+      <View style={[styles.globeSection, { height: GLOBE_H }]}>
         {isWeb ? (
-          <WebIframe srcDoc={MAP_HTML} iframeRef={iframeRef} />
+          <WebIframe srcDoc={GLOBE_HTML} iframeRef={iframeRef} />
         ) : (
           <WebView
             ref={webviewRef}
             originWhitelist={["*"]}
-            source={{ html: MAP_HTML, baseUrl: "https://www.google.com" }}
+            source={{ html: GLOBE_HTML, baseUrl: "https://www.google.com" }}
             style={styles.webview}
             javaScriptEnabled
             domStorageEnabled
             allowsInlineMediaPlayback
-            allowsLinkOpening={false}
             onMessage={handleWebViewMessage}
             onError={() => {}}
           />
         )}
-      </View>
 
-      {/* Badge */}
-      <View style={[styles.badge, { top: topPad + 12, backgroundColor: colors.card }]}>
-        {isLoading ? (
-          <View style={styles.badgeInner}>
+        {/* Loading overlay */}
+        {isLoading && (
+          <View style={[styles.loadingOverlay, { paddingTop: topPad }]}>
             <ActivityIndicator size="small" color={colors.accent} />
-            <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>
-              {progress.stage} {progress.total > 0 ? `${progress.current}/${progress.total}` : ""}
+            <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
+              {progress.stage}{progress.total > 0 ? ` ${progress.current}/${progress.total}` : ""}
             </Text>
           </View>
-        ) : (
-          <View style={styles.badgeInner}>
-            <Ionicons name="globe" size={16} color={colors.accent} />
-            <Text style={[styles.badgeCount, { color: colors.accent }]}>{allVisited.length}</Text>
-            <Text style={[styles.badgeLabel, { color: colors.mutedForeground }]}>visited</Text>
-            {bucketList.length > 0 && (
-              <>
-                <View style={[styles.badgeDivider, { backgroundColor: colors.border }]} />
-                <Ionicons name="bookmark" size={14} color="#38BDF8" />
-                <Text style={[styles.badgeCount, { color: "#38BDF8" }]}>{bucketList.length}</Text>
-                <Text style={[styles.badgeLabel, { color: colors.mutedForeground }]}>saved</Text>
-              </>
-            )}
+        )}
+
+        {/* Badge */}
+        {!isLoading && (
+          <View style={[styles.badge, { top: topPad + 12, backgroundColor: colors.card + "EE" }]}>
+            <View style={styles.badgeInner}>
+              <Ionicons name="globe" size={15} color={colors.accent} />
+              <Text style={[styles.badgeCount, { color: colors.accent }]}>{allVisited.length}</Text>
+              <Text style={[styles.badgeLabel, { color: colors.mutedForeground }]}>visited</Text>
+              {bucketList.length > 0 && (
+                <>
+                  <View style={[styles.badgeDivider, { backgroundColor: colors.border }]} />
+                  <Ionicons name="bookmark" size={13} color="#38BDF8" />
+                  <Text style={[styles.badgeCount, { color: "#38BDF8" }]}>{bucketList.length}</Text>
+                  <Text style={[styles.badgeLabel, { color: colors.mutedForeground }]}>saved</Text>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Share FAB */}
+        {(allVisited.length > 0 || bucketList.length > 0) && mapReady && (
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShareVisible(true);
+            }}
+            style={[styles.shareFab, { top: topPad + 12, backgroundColor: colors.card + "EE" }]}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="share-outline" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        )}
+
+        {/* Tap hint */}
+        {mapReady && allVisited.length === 0 && !isLoading && (
+          <View style={[styles.hint, { bottom: 16, backgroundColor: colors.card + "CC" }]}>
+            <Ionicons name="hand-left-outline" size={13} color={colors.mutedForeground} />
+            <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
+              Tap any country to mark as visited
+            </Text>
           </View>
         )}
       </View>
 
-      {/* Share FAB */}
-      {(allVisited.length > 0 || bucketList.length > 0) && mapReady && (
-        <TouchableOpacity
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setShareVisible(true);
-          }}
-          style={[styles.shareFab, { bottom: insets.bottom + 76, backgroundColor: colors.card }]}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="share-outline" size={22} color={colors.foreground} />
-        </TouchableOpacity>
-      )}
+      {/* ── Stats + Flags panel ── */}
+      <ScrollView
+        style={[styles.panel, { backgroundColor: colors.background }]}
+        contentContainerStyle={[styles.panelContent, { paddingBottom: insets.bottom + 88 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.panelTitle, { color: colors.foreground }]}>Travel Stats</Text>
 
-      {/* Hint */}
-      {mapReady && allVisited.length === 0 && bucketList.length === 0 && !isLoading && (
-        <View style={[styles.hint, { bottom: 100, backgroundColor: colors.card + "DD" }]}>
-          <Ionicons name="hand-left-outline" size={14} color={colors.mutedForeground} />
-          <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
-            Tap any country to mark as visited or save it
-          </Text>
+        <View style={styles.bigStatRow}>
+          <BigStatCard
+            value={allVisited.length}
+            label="countries visited"
+            icon="⛰️"
+            bg="#0C4A6E"
+          />
+          <BigStatCard
+            value={`${pct}%`}
+            label="of the world"
+            icon="🌍"
+            bg="#0F2A1E"
+          />
         </View>
-      )}
+
+        {allVisited.length > 0 && (
+          <>
+            <Text style={[styles.flagsTitle, { color: colors.foreground }]}>
+              Flags collected
+            </Text>
+            <View style={styles.flagsGrid}>
+              {allVisited.map((country) => {
+                const flag = countryToFlag(country);
+                return (
+                  <Pressable
+                    key={country}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      const tripData = countries.find((c) => c.country === country);
+                      if (tripData) { setDetailCountry(tripData); setDetailModal(true); }
+                      else { setManualDetailCountry(country); setManualDetailModal(true); }
+                    }}
+                    style={({ pressed }) => [
+                      styles.flagItem,
+                      { backgroundColor: pressed ? colors.muted : colors.card },
+                    ]}
+                  >
+                    <Text style={styles.flagEmoji}>{flag}</Text>
+                    <Text style={[styles.flagName, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      {country.split(" ")[0]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {allVisited.length === 0 && !isLoading && (
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              Tap countries on the globe to mark them as visited
+            </Text>
+          </View>
+        )}
+      </ScrollView>
 
       {/* Share Card */}
       <ShareCard
@@ -421,7 +547,9 @@ export default function MapTab() {
                 <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
                 <View style={styles.modalHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.modalCountry, { color: colors.foreground }]}>{detailCountry.country}</Text>
+                    <Text style={[styles.modalCountry, { color: colors.foreground }]}>
+                      {countryToFlag(detailCountry.country)} {detailCountry.country}
+                    </Text>
                     <Text style={[styles.modalDates, { color: colors.mutedForeground }]}>
                       {formatDateRange(detailCountry.firstDate, detailCountry.lastDate)}
                     </Text>
@@ -433,23 +561,23 @@ export default function MapTab() {
                     <Ionicons name="locate" size={18} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
-                <View style={styles.statsRow}>
-                  <View style={[styles.statCard, { backgroundColor: colors.background }]}>
-                    <Text style={[styles.statNum, { color: colors.accent }]}>{detailCountry.photoCount}</Text>
-                    <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>photos</Text>
+                <View style={styles.modalStatsRow}>
+                  <View style={[styles.modalStatCard, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.modalStatNum, { color: colors.accent }]}>{detailCountry.photoCount}</Text>
+                    <Text style={[styles.modalStatLabel, { color: colors.mutedForeground }]}>photos</Text>
                   </View>
-                  <View style={[styles.statCard, { backgroundColor: colors.background }]}>
-                    <Text style={[styles.statNum, { color: colors.primary }]}>{detailCountry.cities.length}</Text>
-                    <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+                  <View style={[styles.modalStatCard, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.modalStatNum, { color: colors.primary }]}>{detailCountry.cities.length}</Text>
+                    <Text style={[styles.modalStatLabel, { color: colors.mutedForeground }]}>
                       {detailCountry.cities.length === 1 ? "city" : "cities"}
                     </Text>
                   </View>
                 </View>
                 {detailCountry.cities.slice(0, 5).map((city) => (
-                  <View key={city.key} style={[styles.cityRow, { borderTopColor: colors.border }]}>
+                  <View key={city.key} style={[styles.modalCityRow, { borderTopColor: colors.border }]}>
                     <Ionicons name="location" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.cityName, { color: colors.foreground }]}>{city.city}</Text>
-                    <Text style={[styles.cityDates, { color: colors.mutedForeground }]}>
+                    <Text style={[styles.modalCityName, { color: colors.foreground }]}>{city.city}</Text>
+                    <Text style={[styles.modalCityDates, { color: colors.mutedForeground }]}>
                       {formatDateRange(city.firstDate, city.lastDate)}
                     </Text>
                   </View>
@@ -470,22 +598,26 @@ export default function MapTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  mapContainer: { flex: 1 },
-  webview: { flex: 1 },
+
+  globeSection: { position: "relative", overflow: "hidden" },
+  webview: { flex: 1, backgroundColor: "#020C18" },
+  loadingOverlay: { position: "absolute", top: 0, left: 0, right: 0, alignItems: "center", gap: 6, paddingTop: 56 },
+  loadingText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+
   badge: {
-    position: "absolute", left: 16, right: 16, borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 10,
+    position: "absolute", left: 16, right: 16, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 9,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
-  badgeInner: { flexDirection: "row", alignItems: "center", gap: 6 },
-  badgeCount: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  badgeText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  badgeLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  badgeDivider: { width: 1, height: 16, marginHorizontal: 2 },
+  badgeInner: { flexDirection: "row", alignItems: "center", gap: 5 },
+  badgeCount: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  badgeLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  badgeDivider: { width: 1, height: 14, marginHorizontal: 2 },
+
   shareFab: {
     position: "absolute", right: 16,
-    width: 48, height: 48, borderRadius: 24,
+    width: 42, height: 42, borderRadius: 21,
     alignItems: "center", justifyContent: "center",
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35, shadowRadius: 8, elevation: 6,
@@ -493,9 +625,29 @@ const styles = StyleSheet.create({
   hint: {
     position: "absolute", alignSelf: "center",
     flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18,
   },
-  hintText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  hintText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+
+  panel: { flex: 1 },
+  panelContent: { padding: 20, gap: 0 },
+  panelTitle: { fontSize: 26, fontFamily: "Inter_700Bold", marginBottom: 16 },
+
+  bigStatRow: { flexDirection: "row", gap: 12, marginBottom: 24 },
+
+  flagsTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 14 },
+  flagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  flagItem: {
+    alignItems: "center", justifyContent: "center",
+    width: 60, height: 60, borderRadius: 30,
+    gap: 0,
+  },
+  flagEmoji: { fontSize: 30 },
+  flagName: { fontSize: 9, fontFamily: "Inter_500Medium", textAlign: "center", marginTop: 2 },
+
+  emptyState: { paddingTop: 20, alignItems: "center" },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 21 },
+
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)" },
   confirmSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 12, alignItems: "center" },
   confirmIconWrap: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", marginTop: 12, marginBottom: 16 },
@@ -510,6 +662,7 @@ const styles = StyleSheet.create({
   confirmBtnNoText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   skipBtn: { paddingVertical: 14, alignItems: "center", width: "100%" },
   skipBtnText: { fontSize: 15, fontFamily: "Inter_400Regular" },
+
   modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
@@ -521,12 +674,12 @@ const styles = StyleSheet.create({
   unmarkBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5 },
   unmarkBtnText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   zoomBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  statCard: { flex: 1, borderRadius: 12, padding: 14, alignItems: "center" },
-  statNum: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  statLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  cityRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, borderTopWidth: 1 },
-  cityName: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
-  cityDates: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  modalStatsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  modalStatCard: { flex: 1, borderRadius: 12, padding: 14, alignItems: "center" },
+  modalStatNum: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  modalStatLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  modalCityRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, borderTopWidth: 1 },
+  modalCityName: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
+  modalCityDates: { fontSize: 12, fontFamily: "Inter_400Regular" },
   moreText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 8 },
 });
