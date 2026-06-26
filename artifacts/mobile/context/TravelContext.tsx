@@ -69,7 +69,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v4";
+const CACHE_KEY = "travel_data_v5";
 const MAX_PHOTOS = 2000;
 const BATCH_SIZE = 20;
 
@@ -266,7 +266,19 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           );
           if (results[0]) {
             const { country, city, region, subregion } = results[0];
-            const cityName = city ?? subregion ?? region ?? undefined;
+            // subregion is city-level on iOS (e.g. "London", "Paris")
+            // city can be neighborhood-level (e.g. "Morden", "Chelsea", "Montmartre")
+            // Strip admin prefixes and pick the more city-appropriate name
+            const cleanSub = subregion
+              ? subregion.replace(
+                  /^(Greater |Royal Borough of |London Borough of |City of |County of |Metropolitan Borough of )/i,
+                  ""
+                ).trim()
+              : null;
+            const cityName =
+              cleanSub && (!city || cleanSub.length <= city.length)
+                ? cleanSub
+                : (city ?? cleanSub ?? region ?? undefined);
             bucketPhotos.forEach((p) => {
               p.country = country ?? undefined;
               p.city = cityName;

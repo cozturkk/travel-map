@@ -43,143 +43,131 @@ function formatDateRange(first: number, last: number) {
 const buildGlobeHTML = (): string => `<!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:100%;height:100%;background:#000815;overflow:hidden}
-    #globe-el{width:100vw;height:100vh}
-    #loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#94A3B8;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;text-align:center;pointer-events:none;z-index:10}
-  </style>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#111D35;overflow:hidden;touch-action:none}
+canvas{display:block;touch-action:none}
+#ld{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#7DB4D8;font:14px -apple-system,sans-serif;pointer-events:none}
+</style>
 </head>
 <body>
-<div id="loading">Loading 3D globe…</div>
-<div id="globe-el"></div>
-<script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
+<div id="ld">Loading…</div>
+<canvas id="c"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 var CC=${CC_JS};
-function codeToFlag(code){if(!code||code.length!==2)return'';return code.toUpperCase().split('').map(function(c){return String.fromCodePoint(c.charCodeAt(0)+127397)}).join('')}
-function lookupFlag(name){
-  if(!name)return'';
-  var code=CC[name];
-  if(code)return codeToFlag(code);
-  // case-insensitive
-  var lo=name.toLowerCase();
-  var keys=Object.keys(CC);
-  for(var i=0;i<keys.length;i++){if(keys[i].toLowerCase()===lo)return codeToFlag(CC[keys[i]]);}
-  // strip prefix
-  var stripped=name.replace(/^(republic of |the |kingdom of |democratic republic of )/i,'').trim();
-  if(CC[stripped])return codeToFlag(CC[stripped]);
-  // partial
-  for(var j=0;j<keys.length;j++){var kl=keys[j].toLowerCase();if(keys[j].length>=5&&lo.indexOf(kl)!==-1)return codeToFlag(CC[keys[j]]);if(lo.length>=5&&kl.indexOf(lo)!==-1)return codeToFlag(CC[keys[j]]);}
-  return'';
-}
-function sendUp(msg){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(msg);else window.parent.postMessage(msg,'*')}catch(e){}}
+function cF(code){if(!code||code.length!==2)return'';return code.toUpperCase().split('').map(function(c){return String.fromCodePoint(c.charCodeAt(0)+127397)}).join('')}
+function lookupFlag(name){if(!name)return'';var c=CC[name];if(c)return cF(c);var lo=name.toLowerCase(),ks=Object.keys(CC);for(var i=0;i<ks.length;i++){if(ks[i].toLowerCase()===lo)return cF(CC[ks[i]]);}var s=name.replace(/^(republic of |the |kingdom of |democratic republic of )/i,'').trim();if(CC[s])return cF(CC[s]);for(var j=0;j<ks.length;j++){var kl=ks[j].toLowerCase();if(ks[j].length>=5&&lo.indexOf(kl)!==-1)return cF(CC[ks[j]]);if(lo.length>=5&&kl.indexOf(lo)!==-1)return cF(CC[ks[j]]);}return'';}
+function sendUp(m){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(m);else window.parent.postMessage(m,'*')}catch(e){}}
 
-var visited={},bucketList={},centroids={},world=null;
+var canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+var dpr=Math.min(window.devicePixelRatio||1,2);
+var W=window.innerWidth,H=window.innerHeight;
+canvas.width=W*dpr;canvas.height=H*dpr;
+canvas.style.width=W+'px';canvas.style.height=H+'px';
+ctx.scale(dpr,dpr);
 
-function computeCentroid(f){
-  var lats=[],lngs=[];
-  function walk(c){if(!c||!c.length)return;if(typeof c[0]==='number'){lngs.push(c[0]);lats.push(c[1]);}else c.forEach(walk);}
-  if(f.geometry){
-    if(f.geometry.type==='Polygon')f.geometry.coordinates.forEach(function(r){r.forEach(walk)});
-    else if(f.geometry.type==='MultiPolygon')f.geometry.coordinates.forEach(function(p){p.forEach(function(r){r.forEach(walk)})});
+var R=Math.min(W,H)*0.47;
+var proj=d3.geoOrthographic().scale(R).translate([W/2,H/2]).clipAngle(90).precision(0.2);
+var path=d3.geoPath().projection(proj).context(ctx);
+var grat=d3.geoGraticule()();
+var features=[],centroids={},visited={},bucketList={};
+var rot=[10,-20],autoRot=true,resumeT;
+
+function draw(){
+  proj.rotate(rot);
+  ctx.clearRect(0,0,W,H);
+  // Sphere bg
+  ctx.beginPath();path({type:'Sphere'});
+  var g=ctx.createRadialGradient(W*0.42,H*0.38,R*0.05,W/2,H/2,R);
+  g.addColorStop(0,'#243F6A');g.addColorStop(1,'#0E1E38');
+  ctx.fillStyle=g;ctx.fill();
+  // Graticule
+  ctx.beginPath();path(grat);
+  ctx.strokeStyle='rgba(255,255,255,0.045)';ctx.lineWidth=0.6;ctx.stroke();
+  // Countries
+  for(var i=0;i<features.length;i++){
+    var f=features[i],n=f.properties.ADMIN||f.properties.name||'';
+    ctx.beginPath();path(f);
+    ctx.fillStyle=visited[n]?'rgba(251,191,36,0.9)':bucketList[n]?'rgba(56,189,248,0.62)':'rgba(75,105,150,0.72)';
+    ctx.fill();
+    ctx.strokeStyle='rgba(120,160,210,0.3)';ctx.lineWidth=0.5;ctx.stroke();
   }
-  if(!lats.length)return null;
-  return{lat:lats.reduce(function(a,b){return a+b},0)/lats.length,lng:lngs.reduce(function(a,b){return a+b},0)/lngs.length};
+  // Globe rim
+  ctx.beginPath();path({type:'Sphere'});
+  ctx.strokeStyle='rgba(100,160,230,0.2)';ctx.lineWidth=1.5;ctx.stroke();
+  // Flag emoji
+  ctx.shadowColor='rgba(0,0,0,0.95)';ctx.shadowBlur=5;
+  ctx.font='18px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(var name in visited){
+    if(!visited[name])continue;
+    var ce=centroids[name],fl=lookupFlag(name);
+    if(!ce||!fl)continue;
+    var pt=proj([ce.lng,ce.lat]);
+    if(pt)ctx.fillText(fl,pt[0],pt[1]);
+  }
+  ctx.shadowBlur=0;
 }
 
-function capColor(f){
-  var n=f.properties.ADMIN||f.properties.name||'';
-  if(visited[n])return 'rgba(255,178,0,0.92)';
-  if(bucketList[n])return 'rgba(56,189,248,0.65)';
-  return 'rgba(88,110,145,0.68)';
-}
-function sideColor(){return 'rgba(0,0,0,0.12)'}
-function strokeColor(){return 'rgba(110,140,180,0.45)'}
-function polyAlt(f){var n=f.properties.ADMIN||f.properties.name||'';return visited[n]?0.028:0.003;}
+function tick(){if(autoRot){rot[0]+=0.15;draw();}requestAnimationFrame(tick);}
 
-function flagsData(){
-  return Object.keys(visited).filter(function(n){return visited[n]}).map(function(n){
-    var c=centroids[n];var flag=lookupFlag(n);
-    if(!c||!flag)return null;
-    return{name:n,flag:flag,lat:c.lat,lng:c.lng};
-  }).filter(Boolean);
-}
+// Mouse drag
+var drag=false,lx,ly;
+canvas.addEventListener('mousedown',function(e){drag=true;lx=e.offsetX;ly=e.offsetY;autoRot=false;clearTimeout(resumeT);});
+canvas.addEventListener('mousemove',function(e){if(!drag)return;rot[0]+=(e.offsetX-lx)*0.4;rot[1]-=(e.offsetY-ly)*0.4;rot[1]=Math.max(-80,Math.min(80,rot[1]));lx=e.offsetX;ly=e.offsetY;draw();});
+canvas.addEventListener('mouseup',function(){drag=false;resumeT=setTimeout(function(){autoRot=true;},4000);});
 
-function updateGlobe(){
-  if(!world)return;
-  world.polygonCapColor(capColor).polygonAltitude(polyAlt);
-  world.htmlElementsData(flagsData());
-}
+// Touch drag + tap
+var lt,mv;
+canvas.addEventListener('touchstart',function(e){e.preventDefault();lt=e.touches[0];mv=0;autoRot=false;clearTimeout(resumeT);},{passive:false});
+canvas.addEventListener('touchmove',function(e){e.preventDefault();var t=e.touches[0],dx=t.clientX-lt.clientX,dy=t.clientY-lt.clientY;rot[0]+=dx*0.4;rot[1]-=dy*0.4;rot[1]=Math.max(-80,Math.min(80,rot[1]));mv+=Math.abs(dx)+Math.abs(dy);lt=t;draw();},{passive:false});
+canvas.addEventListener('touchend',function(e){if(mv<6){var t=e.changedTouches[0],r=canvas.getBoundingClientRect();handleTap(t.clientX-r.left,t.clientY-r.top);}resumeT=setTimeout(function(){autoRot=true;},4000);});
+canvas.addEventListener('click',function(e){handleTap(e.offsetX,e.offsetY);});
 
-var el=document.getElementById('globe-el');
-world=Globe({animateIn:false})(el)
-  .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
-  .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
-  .atmosphereColor('rgba(56,189,248,0.65)')
-  .atmosphereAltitude(0.14)
-  .polygonCapColor(capColor)
-  .polygonSideColor(sideColor)
-  .polygonStrokeColor(strokeColor)
-  .polygonAltitude(polyAlt)
-  .htmlElementsData([])
-  .htmlLat(function(d){return d.lat})
-  .htmlLng(function(d){return d.lng})
-  .htmlAltitude(0.035)
-  .htmlElement(function(d){
-    var div=document.createElement('div');
-    div.innerHTML=d.flag;
-    div.style.cssText='font-size:18px;line-height:1;pointer-events:none;text-shadow:0 1px 5px rgba(0,0,0,0.95),0 0 8px rgba(0,0,0,0.7);';
-    return div;
-  })
-  .polygonTransitionDuration(0)
-  .onPolygonClick(function(polygon,evt){
-    var n=polygon.properties.ADMIN||polygon.properties.name||'';
-    if(!n)return;
-    sendUp(JSON.stringify({type:'countryTap',country:n,isVisited:!!visited[n],inBucket:!!bucketList[n]}));
-  });
-
-/* Auto-rotate */
-world.controls().autoRotate=true;
-world.controls().autoRotateSpeed=0.38;
-world.controls().enableDamping=true;
-world.controls().dampingFactor=0.08;
-world.controls().enableZoom=true;
-var resumeT;
-function pauseRotate(){world.controls().autoRotate=false;clearTimeout(resumeT);}
-function scheduleResume(){clearTimeout(resumeT);resumeT=setTimeout(function(){world.controls().autoRotate=true;},5000);}
-el.addEventListener('touchstart',pauseRotate,{passive:true});
-el.addEventListener('touchend',scheduleResume,{passive:true});
-el.addEventListener('mousedown',pauseRotate);
-el.addEventListener('mouseup',scheduleResume);
-
-/* Load country data */
-fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
-  .then(function(r){return r.json()})
-  .then(function(data){
-    document.getElementById('loading').style.display='none';
-    data.features.forEach(function(f){
+function handleTap(x,y){
+  var dx=x-W/2,dy=y-H/2;
+  if(dx*dx+dy*dy>R*R)return;
+  var co=proj.invert([x,y]);if(!co)return;
+  for(var i=0;i<features.length;i++){
+    var f=features[i];
+    if(d3.geoContains(f,co)){
       var n=f.properties.ADMIN||f.properties.name||'';
-      if(n)centroids[n]=computeCentroid(f);
+      if(n)sendUp(JSON.stringify({type:'countryTap',country:n,isVisited:!!visited[n],inBucket:!!bucketList[n]}));
+      return;
+    }
+  }
+}
+
+// Load countries
+fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
+  .then(function(r){return r.json();})
+  .then(function(data){
+    document.getElementById('ld').style.display='none';
+    features=data.features;
+    features.forEach(function(f){
+      var n=f.properties.ADMIN||f.properties.name||'';
+      if(n){try{var c=d3.geoCentroid(f);if(isFinite(c[0])&&isFinite(c[1]))centroids[n]={lng:c[0],lat:c[1]};}catch(e){}}
     });
-    world.polygonsData(data.features);
-    updateGlobe();
+    tick();
     sendUp(JSON.stringify({type:'mapReady'}));
   })
-  .catch(function(){
-    document.getElementById('loading').textContent='Globe unavailable – check connection';
-    sendUp(JSON.stringify({type:'mapError'}));
-  });
+  .catch(function(){document.getElementById('ld').textContent='Globe unavailable';tick();sendUp(JSON.stringify({type:'mapError'}));});
 
 function handleMsg(e){
   try{
     var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
-    if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});updateGlobe();}
-    else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});updateGlobe();}
-    else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];updateGlobe();}
-    else if(d.type==='markBucket'){bucketList[d.country]=true;updateGlobe();}
-    else if(d.type==='unmarkBucket'){delete bucketList[d.country];updateGlobe();}
-    else if(d.type==='zoomCountry'){var c=centroids[d.country];if(c&&world)world.pointOfView({lat:c.lat,lng:c.lng,altitude:1.6},1000);}
+    if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});draw();}
+    else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});draw();}
+    else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];draw();}
+    else if(d.type==='markBucket'){bucketList[d.country]=true;draw();}
+    else if(d.type==='unmarkBucket'){delete bucketList[d.country];draw();}
+    else if(d.type==='zoomCountry'){
+      var ce=centroids[d.country];if(!ce)return;
+      var t0=Date.now(),s0=[rot[0],rot[1]],tgt=[-ce.lng,-(ce.lat*0.6)];
+      autoRot=false;
+      (function anim(){var p=Math.min(1,(Date.now()-t0)/900);rot[0]=s0[0]+(tgt[0]-s0[0])*p;rot[1]=s0[1]+(tgt[1]-s0[1])*p;draw();if(p<1)requestAnimationFrame(anim);})();
+    }
   }catch(err){}
 }
 document.addEventListener('message',handleMsg);
@@ -400,13 +388,11 @@ export default function MapTab() {
             <View style={styles.badgeInner}>
               <Ionicons name="globe" size={15} color={colors.accent} />
               <Text style={[styles.badgeCount, { color: colors.accent }]}>{allVisited.length}</Text>
-              <Text style={[styles.badgeLabel, { color: colors.mutedForeground }]}>visited</Text>
               {bucketList.length > 0 && (
                 <>
                   <View style={[styles.badgeDivider, { backgroundColor: colors.border }]} />
-                  <Ionicons name="bookmark" size={13} color="#38BDF8" />
-                  <Text style={[styles.badgeCount, { color: "#38BDF8" }]}>{bucketList.length}</Text>
-                  <Text style={[styles.badgeLabel, { color: colors.mutedForeground }]}>saved</Text>
+                  <Ionicons name="bookmark" size={13} color={colors.primary} />
+                  <Text style={[styles.badgeCount, { color: colors.primary }]}>{bucketList.length}</Text>
                 </>
               )}
             </View>
