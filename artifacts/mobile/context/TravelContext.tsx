@@ -80,7 +80,9 @@ function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
     const city =
       photo.city ??
       photo.region ??
-      `${photo.latitude.toFixed(1)}, ${photo.longitude.toFixed(1)}`;
+      (photo.latitude != null && photo.longitude != null
+        ? `${photo.latitude.toFixed(1)}, ${photo.longitude.toFixed(1)}`
+        : "Unknown location");
 
     if (!countryMap.has(country)) countryMap.set(country, new Map());
     const cityMap = countryMap.get(country)!;
@@ -237,6 +239,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
       // Bucket unique locations (1-decimal-place ≈ 11km accuracy)
       const locationBuckets = new Map<string, PhotoAsset[]>();
       for (const photo of rawPhotos) {
+        if (photo.latitude == null || photo.longitude == null) continue;
         const key = `${photo.latitude.toFixed(1)},${photo.longitude.toFixed(1)}`;
         if (!locationBuckets.has(key)) locationBuckets.set(key, []);
         locationBuckets.get(key)!.push(photo);
