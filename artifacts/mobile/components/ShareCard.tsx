@@ -55,148 +55,164 @@ function buildHTML(stats: ShareStats): string {
 <script>
 (function(){
 var D=${data};
-var ISO={"Afghanistan":"AF","Albania":"AL","Algeria":"DZ","Argentina":"AR","Armenia":"AM","Australia":"AU","Austria":"AT","Azerbaijan":"AZ","Bahrain":"BH","Bangladesh":"BD","Belgium":"BE","Bolivia":"BO","Bosnia and Herzegovina":"BA","Brazil":"BR","Bulgaria":"BG","Cambodia":"KH","Canada":"CA","Chile":"CL","China":"CN","Colombia":"CO","Croatia":"HR","Cuba":"CU","Cyprus":"CY","Czech Republic":"CZ","Denmark":"DK","Dominican Republic":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Estonia":"EE","Ethiopia":"ET","Finland":"FI","France":"FR","Georgia":"GE","Germany":"DE","Ghana":"GH","Greece":"GR","Guatemala":"GT","Honduras":"HN","Hungary":"HU","Iceland":"IS","India":"IN","Indonesia":"ID","Iran":"IR","Iraq":"IQ","Ireland":"IE","Israel":"IL","Italy":"IT","Ivory Coast":"CI","Jamaica":"JM","Japan":"JP","Jordan":"JO","Kazakhstan":"KZ","Kenya":"KE","Kuwait":"KW","Kyrgyzstan":"KG","Laos":"LA","Latvia":"LV","Lebanon":"LB","Libya":"LY","Lithuania":"LT","Luxembourg":"LU","Malaysia":"MY","Maldives":"MV","Malta":"MT","Mexico":"MX","Moldova":"MD","Mongolia":"MN","Montenegro":"ME","Morocco":"MA","Mozambique":"MZ","Myanmar":"MM","Nepal":"NP","Netherlands":"NL","New Zealand":"NZ","Nicaragua":"NI","Nigeria":"NG","North Macedonia":"MK","Norway":"NO","Oman":"OM","Pakistan":"PK","Palestine":"PS","Panama":"PA","Paraguay":"PY","Peru":"PE","Philippines":"PH","Poland":"PL","Portugal":"PT","Qatar":"QA","Romania":"RO","Russia":"RU","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Singapore":"SG","Slovakia":"SK","Slovenia":"SI","Somalia":"SO","South Africa":"ZA","South Korea":"KR","South Sudan":"SS","Spain":"ES","Sri Lanka":"LK","Sudan":"SD","Sweden":"SE","Switzerland":"CH","Syria":"SY","Tanzania":"TZ","Thailand":"TH","Tunisia":"TN","Turkey":"TR","Uganda":"UG","Ukraine":"UA","United Arab Emirates":"AE","United Kingdom":"GB","United States":"US","Uruguay":"UY","Uzbekistan":"UZ","Venezuela":"VE","Vietnam":"VN","Yemen":"YE","Zambia":"ZM","Zimbabwe":"ZW","Angola":"AO","Bahamas":"BS","Barbados":"BB","Belarus":"BY","Belize":"BZ","Benin":"BJ","Botswana":"BW","Brunei":"BN","Burkina Faso":"BF","Burundi":"BI","Cameroon":"CM","Cape Verde":"CV","Chad":"TD","Costa Rica":"CR","Democratic Republic of the Congo":"CD","Eritrea":"ER","Eswatini":"SZ","Fiji":"FJ","Gabon":"GA","Gambia":"GM","Guinea":"GN","Haiti":"HT","Lesotho":"LS","Liberia":"LR","Madagascar":"MG","Malawi":"MW","Mali":"ML","Mauritania":"MR","Mauritius":"MU","Monaco":"MC","Niger":"NE","Papua New Guinea":"PG","Rwanda":"RW","Seychelles":"SC","Sierra Leone":"SL","Suriname":"SR","Togo":"TG","Trinidad and Tobago":"TT","Vanuatu":"VU","Andorra":"AD","Kosovo":"XK","San Marino":"SM"};
+var ISO={"Afghanistan":"AF","Albania":"AL","Algeria":"DZ","Argentina":"AR","Armenia":"AM","Australia":"AU","Austria":"AT","Azerbaijan":"AZ","Bahrain":"BH","Bangladesh":"BD","Belgium":"BE","Bolivia":"BO","Bosnia and Herzegovina":"BA","Brazil":"BR","Bulgaria":"BG","Cambodia":"KH","Canada":"CA","Chile":"CL","China":"CN","Colombia":"CO","Croatia":"HR","Cuba":"CU","Cyprus":"CY","Czech Republic":"CZ","Denmark":"DK","Dominican Republic":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Estonia":"EE","Ethiopia":"ET","Finland":"FI","France":"FR","Georgia":"GE","Germany":"DE","Ghana":"GH","Greece":"GR","Guatemala":"GT","Honduras":"HN","Hungary":"HU","Iceland":"IS","India":"IN","Indonesia":"ID","Iran":"IR","Iraq":"IQ","Ireland":"IE","Israel":"IL","Italy":"IT","Ivory Coast":"CI","Jamaica":"JM","Japan":"JP","Jordan":"JO","Kazakhstan":"KZ","Kenya":"KE","Kuwait":"KW","Laos":"LA","Latvia":"LV","Lebanon":"LB","Libya":"LY","Lithuania":"LT","Luxembourg":"LU","Malaysia":"MY","Maldives":"MV","Malta":"MT","Mexico":"MX","Moldova":"MD","Mongolia":"MN","Montenegro":"ME","Morocco":"MA","Mozambique":"MZ","Myanmar":"MM","Nepal":"NP","Netherlands":"NL","New Zealand":"NZ","Nigeria":"NG","North Macedonia":"MK","Norway":"NO","Oman":"OM","Pakistan":"PK","Palestine":"PS","Panama":"PA","Paraguay":"PY","Peru":"PE","Philippines":"PH","Poland":"PL","Portugal":"PT","Qatar":"QA","Romania":"RO","Russia":"RU","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Singapore":"SG","Slovakia":"SK","Slovenia":"SI","Somalia":"SO","South Africa":"ZA","South Korea":"KR","Spain":"ES","Sri Lanka":"LK","Sudan":"SD","Sweden":"SE","Switzerland":"CH","Syria":"SY","Tanzania":"TZ","Thailand":"TH","Tunisia":"TN","Turkey":"TR","Uganda":"UG","Ukraine":"UA","United Arab Emirates":"AE","United Kingdom":"GB","United States":"US","Uruguay":"UY","Uzbekistan":"UZ","Venezuela":"VE","Vietnam":"VN","Yemen":"YE","Zambia":"ZM","Zimbabwe":"ZW","Angola":"AO","Bahamas":"BS","Belarus":"BY","Benin":"BJ","Botswana":"BW","Brunei":"BN","Burkina Faso":"BF","Burundi":"BI","Cameroon":"CM","Cape Verde":"CV","Chad":"TD","Costa Rica":"CR","Democratic Republic of the Congo":"CD","Eritrea":"ER","Eswatini":"SZ","Fiji":"FJ","Gabon":"GA","Gambia":"GM","Guinea":"GN","Haiti":"HT","Lesotho":"LS","Liberia":"LR","Madagascar":"MG","Malawi":"MW","Mali":"ML","Mauritania":"MR","Mauritius":"MU","Monaco":"MC","Niger":"NE","Papua New Guinea":"PG","Rwanda":"RW","Seychelles":"SC","Sierra Leone":"SL","Suriname":"SR","Togo":"TG","Trinidad and Tobago":"TT","Andorra":"AD","Kosovo":"XK","San Marino":"SM"};
 function flag(n){var c=ISO[n];if(!c)return'';return c.split('').map(function(x){return String.fromCodePoint(0x1F1E6+x.charCodeAt(0)-65);}).join('');}
 
-var W=1080,H=1920,GX=540,GY=470,GR=370;
+var W=1080,H=1920,GX=540,GY=478,GR=388;
 var cv=document.getElementById('c'),ctx=cv.getContext('2d');
 function send(m){try{window.ReactNativeWebView.postMessage(m);}catch(e){try{window.parent.postMessage(m,'*');}catch(e2){}}}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 
-// Background
+// Smooth organic blob using bezier-approximated ellipse
+function organic(cx,cy,rx,ry,rot){
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(rot||0);
+  var k=0.5522;
+  ctx.beginPath();
+  ctx.moveTo(0,-ry);
+  ctx.bezierCurveTo(rx*k,-ry, rx,-ry*k, rx,0);
+  ctx.bezierCurveTo(rx,ry*k, rx*k,ry, 0,ry);
+  ctx.bezierCurveTo(-rx*k,ry, -rx,ry*k, -rx,0);
+  ctx.bezierCurveTo(-rx,-ry*k, -rx*k,-ry, 0,-ry);
+  ctx.closePath();ctx.fill();ctx.restore();
+}
+
+// Canvas-drawn airplane silhouette
+function plane(x,y,rot,sz){
+  ctx.save();ctx.translate(x,y);ctx.rotate(rot);
+  ctx.fillStyle='rgba(238,188,72,0.96)';
+  // body
+  ctx.beginPath();ctx.moveTo(0,-sz);ctx.lineTo(sz*0.20,sz*0.38);ctx.lineTo(0,sz*0.16);ctx.lineTo(-sz*0.20,sz*0.38);ctx.closePath();ctx.fill();
+  // wings
+  ctx.beginPath();ctx.moveTo(-sz*0.74,-sz*0.06);ctx.lineTo(sz*0.74,-sz*0.06);ctx.lineTo(sz*0.20,sz*0.30);ctx.lineTo(-sz*0.20,sz*0.30);ctx.closePath();ctx.fill();
+  // tail
+  ctx.beginPath();ctx.moveTo(-sz*0.34,sz*0.33);ctx.lineTo(sz*0.34,sz*0.33);ctx.lineTo(sz*0.18,sz*0.54);ctx.lineTo(-sz*0.18,sz*0.54);ctx.closePath();ctx.fill();
+  ctx.restore();
+}
+
+// ── Background ──────────────────────────────────────────────────────────────
 var bg=ctx.createLinearGradient(0,0,0,H);
-bg.addColorStop(0,'#0d1b2e');bg.addColorStop(1,'#091320');
+bg.addColorStop(0,'#0c1a2c');bg.addColorStop(0.45,'#0a1624');bg.addColorStop(1,'#07101c');
 ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 
-// Globe — clipped
+// Subtle radial glow behind globe
+var glow=ctx.createRadialGradient(GX,GY,GR*0.3,GX,GY,GR*1.5);
+glow.addColorStop(0,'rgba(25,75,170,0.12)');glow.addColorStop(1,'rgba(25,75,170,0)');
+ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+
+// ── Globe — ocean clipped ────────────────────────────────────────────────────
 ctx.save();
 ctx.beginPath();ctx.arc(GX,GY,GR,0,Math.PI*2);ctx.clip();
-var oc=ctx.createRadialGradient(GX-GR*0.28,GY-GR*0.28,0,GX,GY,GR);
-oc.addColorStop(0,'#1f4068');oc.addColorStop(0.65,'#162a4a');oc.addColorStop(1,'#0c1d34');
+var oc=ctx.createRadialGradient(GX-GR*0.30,GY-GR*0.28,0, GX,GY,GR);
+oc.addColorStop(0,'#1e4272');oc.addColorStop(0.50,'#142e58');oc.addColorStop(1,'#0a1c38');
 ctx.fillStyle=oc;ctx.fillRect(GX-GR,GY-GR,GR*2,GR*2);
 
-// Orthographic projection centred at 0°E 15°N
-var P0=15*Math.PI/180;
-function proj(la,lo){
-  var p=la*Math.PI/180,l=lo*Math.PI/180;
-  var cosc=Math.sin(P0)*Math.sin(p)+Math.cos(P0)*Math.cos(p)*Math.cos(l);
-  if(cosc<0)return null;
-  return[GX+GR*Math.cos(p)*Math.sin(l),GY-GR*(Math.cos(P0)*Math.sin(p)-Math.sin(P0)*Math.cos(p)*Math.cos(l))];
-}
-function blob(la,lo,rx,ry,rot){
-  var pt=proj(la,lo);if(!pt)return;
-  var p=la*Math.PI/180,l=lo*Math.PI/180;
-  var cosc=Math.sin(P0)*Math.sin(p)+Math.cos(P0)*Math.cos(p)*Math.cos(l);
-  if(cosc<0.08)return;
-  var sc=0.2+cosc*0.8;
-  ctx.save();ctx.translate(pt[0],pt[1]);ctx.rotate(rot||0);
-  ctx.beginPath();ctx.ellipse(0,0,rx*sc,ry*sc,0,0,Math.PI*2);
-  ctx.fill();ctx.restore();
-}
-ctx.fillStyle='#c2651a';
-blob(2,20,94,132,0);       // Africa
-blob(52,10,56,46,0.08);    // Europe
-blob(-15,-58,60,90,0.12);  // South America
-blob(72,-44,40,34,-0.08);  // Greenland
-blob(50,-95,70,60,0);      // North America
-blob(63,17,26,38,-0.05);   // Scandinavia
-ctx.restore(); // end clip
+// Continent blobs — positions are pixel offsets relative to globe centre
+// Expressed as multiples of GR so they scale with globe size
+ctx.fillStyle='#c96318';
+organic(GX+0.07*GR, GY+0.07*GR,  0.245*GR, 0.345*GR,  0.04);  // Africa
+organic(GX-0.04*GR, GY-0.29*GR,  0.162*GR, 0.132*GR, -0.08);  // Europe
+organic(GX-0.44*GR, GY+0.20*GR,  0.140*GR, 0.260*GR,  0.14);  // S. America
+organic(GX-0.31*GR, GY-0.50*GR,  0.110*GR, 0.090*GR, -0.18);  // Greenland
+organic(GX-0.60*GR, GY-0.10*GR,  0.100*GR, 0.140*GR,  0.10);  // N. America (edge)
+organic(GX+0.31*GR, GY-0.08*GR,  0.085*GR, 0.125*GR,  0.16);  // Arabian Peninsula
+organic(GX+0.07*GR, GY-0.46*GR,  0.072*GR, 0.128*GR, -0.04);  // Scandinavia
+ctx.restore(); // end ocean clip
 
-// Globe rim glow
+// Rim glow (drawn after clip so it covers the globe edge)
 ctx.beginPath();ctx.arc(GX,GY,GR,0,Math.PI*2);
-var rim=ctx.createRadialGradient(GX,GY,GR*0.72,GX,GY,GR);
-rim.addColorStop(0,'rgba(20,80,180,0)');rim.addColorStop(0.82,'rgba(20,80,180,0.09)');rim.addColorStop(1,'rgba(50,130,255,0.52)');
+var rim=ctx.createRadialGradient(GX,GY,GR*0.74, GX,GY,GR);
+rim.addColorStop(0,'rgba(18,72,200,0)');rim.addColorStop(1,'rgba(42,122,255,0.50)');
 ctx.fillStyle=rim;ctx.fill();
-ctx.strokeStyle='rgba(70,145,255,0.38)';ctx.lineWidth=3;ctx.stroke();
+ctx.strokeStyle='rgba(62,138,255,0.52)';ctx.lineWidth=3.2;ctx.stroke();
 
-// Dotted flight paths
-ctx.setLineDash([7,16]);ctx.lineWidth=2.8;ctx.strokeStyle='rgba(200,100,20,0.52)';
-ctx.beginPath();ctx.ellipse(GX+10,GY+22,GR*0.85,GR*0.27,0.24,0,Math.PI*2);ctx.stroke();
-ctx.beginPath();ctx.ellipse(GX-12,GY-6,GR*0.78,GR*0.26,-0.26,0,Math.PI*2);ctx.stroke();
-ctx.setLineDash([]);
+// ── Orbital flight paths (dashed ellipses, outside globe clip) ───────────────
+ctx.save();
+ctx.setLineDash([10,19]);ctx.lineWidth=3.4;ctx.strokeStyle='rgba(212,106,18,0.74)';
+ctx.beginPath();ctx.ellipse(GX+6,GY+20, GR*0.88,GR*0.284, 0.20, 0,Math.PI*2);ctx.stroke();
+ctx.restore();
+ctx.save();
+ctx.setLineDash([10,19]);ctx.lineWidth=3.4;ctx.strokeStyle='rgba(212,106,18,0.60)';
+ctx.beginPath();ctx.ellipse(GX-8,GY-8,  GR*0.80,GR*0.268,-0.22, 0,Math.PI*2);ctx.stroke();
+ctx.restore();
 
-// Airplanes on paths
-ctx.font='52px serif';ctx.textAlign='center';
-ctx.fillText('\u2708',GX+GR*0.60,GY+GR*0.13+18);
-ctx.fillText('\u2708',GX-GR*0.54,GY-GR*0.08+18);
+// ── Airplanes on orbital paths ───────────────────────────────────────────────
+plane(GX+GR*0.62, GY+GR*0.16, -0.32, 32);
+plane(GX-GR*0.56, GY-GR*0.10,  2.60, 32);
 
-// Top bar
-ctx.fillStyle='#1d4ed8';ctx.beginPath();ctx.arc(78,66,42,0,Math.PI*2);ctx.fill();
-ctx.fillStyle='#fff';ctx.font='36px serif';ctx.textAlign='center';ctx.fillText('\u2708',78,79);
-ctx.textAlign='left';ctx.fillStyle='rgba(240,248,255,0.92)';
-ctx.font='bold 42px -apple-system,system-ui,Arial,sans-serif';ctx.fillText('Travel Map',136,80);
+// ── Top bar ──────────────────────────────────────────────────────────────────
+ctx.fillStyle='#1a46bb';ctx.beginPath();ctx.arc(72,62,40,0,Math.PI*2);ctx.fill();
+plane(72,62, 0, 16);
+ctx.fillStyle='rgba(228,242,255,0.92)';
+ctx.font='bold 42px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='left';
+ctx.fillText('Travel Map',128,76);
 
-// Heading "My travels so far."
-var hY=942;
+// ── Heading ───────────────────────────────────────────────────────────────────
+var hY=960;
 ctx.textAlign='left';ctx.fillStyle='#f1f5f9';
-ctx.font='bold 94px -apple-system,system-ui,Arial,sans-serif';
+ctx.font='bold 98px -apple-system,system-ui,Arial,sans-serif';
 var htxt='My travels so far';
 ctx.fillText(htxt,60,hY);
-ctx.fillStyle='#3b82f6';
+ctx.fillStyle='#4a9cff';
 ctx.fillText('.',60+ctx.measureText(htxt).width,hY);
 
-// Stat boxes
-var bY=hY+58,bH=252,bGap=22;
-var bW=Math.floor((W-60-60-bGap)/2);
+// ── Stat boxes ────────────────────────────────────────────────────────────────
+var bY=hY+64, bH=272, bGap=22, bW=Math.floor((W-120-bGap)/2);
 
 // Left box — countries visited
-ctx.fillStyle='#17355a';rr(60,bY,bW,bH,22);ctx.fill();
+ctx.fillStyle='#162e50';rr(60,bY,bW,bH,24);ctx.fill();
 var cStr=String(D.countries);
-var cFs=D.countries<10?178:D.countries<100?148:120;
+var cFs=cStr.length<2?168:cStr.length<3?140:115;
+var cBase=bY+22+Math.round(cFs*0.74);
 ctx.fillStyle='#f1f5f9';ctx.font='bold '+cFs+'px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='left';
-ctx.fillText(cStr,90,bY+32+Math.round(cFs*0.82));
-ctx.fillStyle='rgba(180,212,255,0.72)';ctx.font='400 44px -apple-system,system-ui,Arial,sans-serif';
-ctx.fillText('countries',90,bY+bH-56);
-ctx.fillText('visited',90,bY+bH-10);
+ctx.fillText(cStr,88,cBase);
+ctx.fillStyle='rgba(152,204,255,0.70)';ctx.font='400 43px -apple-system,system-ui,Arial,sans-serif';
+ctx.fillText('countries',88,bY+bH-56);
+ctx.fillText('visited',88,bY+bH-10);
 
 // Right box — % of world
 var pct=Math.max(1,Math.round(D.countries/195*100));
 var pStr=String(pct);
-var pFs=pct<10?178:pct<100?148:120;
-ctx.fillStyle='#2c1608';rr(60+bW+bGap,bY,bW,bH,22);ctx.fill();
+var pFs=pStr.length<2?168:pStr.length<3?140:115;
+var pBase=bY+22+Math.round(pFs*0.74);
+var rBx=60+bW+bGap;
+ctx.fillStyle='#2b1507';rr(rBx,bY,bW,bH,24);ctx.fill();
+var pNumW;
 ctx.fillStyle='#f1f5f9';ctx.font='bold '+pFs+'px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='left';
-var pNumW=ctx.measureText(pStr).width;
-var pBx=60+bW+bGap+90;
-ctx.fillText(pStr,pBx,bY+32+Math.round(pFs*0.82));
-ctx.font='bold '+Math.round(pFs*0.55)+'px -apple-system,system-ui,Arial,sans-serif';
-ctx.fillText('%',pBx+pNumW+4,bY+32+Math.round(pFs*0.52));
-ctx.fillStyle='rgba(255,200,140,0.72)';ctx.font='400 44px -apple-system,system-ui,Arial,sans-serif';
-ctx.fillText('of the',pBx,bY+bH-56);
-ctx.fillText('world',pBx,bY+bH-10);
+pNumW=ctx.measureText(pStr).width;
+ctx.fillText(pStr,rBx+28,pBase);
+// % as superscript (smaller, raised)
+ctx.font='bold '+Math.round(pFs*0.50)+'px -apple-system,system-ui,Arial,sans-serif';
+ctx.fillText('%',rBx+28+pNumW+8, bY+22+Math.round(pFs*0.40));
+ctx.fillStyle='rgba(255,193,112,0.70)';ctx.font='400 43px -apple-system,system-ui,Arial,sans-serif';
+ctx.fillText('of the',rBx+28,bY+bH-56);
+ctx.fillText('world',rBx+28,bY+bH-10);
 
-// FLAGS COLLECTED
-var fLabelY=bY+bH+78;
-ctx.textAlign='left';ctx.fillStyle='rgba(160,190,230,0.55)';
-ctx.font='600 36px -apple-system,system-ui,Arial,sans-serif';
-ctx.fillText('FLAGS COLLECTED',60,fLabelY);
+// ── FLAGS COLLECTED ───────────────────────────────────────────────────────────
+var flY=bY+bH+82;
+ctx.textAlign='left';ctx.fillStyle='rgba(132,174,224,0.52)';
+ctx.font='600 34px -apple-system,system-ui,Arial,sans-serif';
+ctx.fillText('FLAGS COLLECTED',60,flY);
 
-// Flag emojis — up to 10 per row, 2 rows max
 var flags=D.visited.map(function(n){return flag(n);}).filter(function(f){return f!='';});
-var fSize=82,fGap=10,fPerRow=Math.floor((W-120)/(fSize+fGap));
-var fRowY=fLabelY+62;
-ctx.font=fSize+'px serif';ctx.textAlign='left';
-var maxFlags=fPerRow*2;
-flags.slice(0,maxFlags).forEach(function(f,i){
+var fSz=76,fStep=90,fPerRow=Math.floor((W-120)/fStep);
+ctx.font=fSz+'px serif';ctx.textAlign='left';
+var maxF=fPerRow*2;
+flags.slice(0,maxF).forEach(function(f,i){
   var row=Math.floor(i/fPerRow),col=i%fPerRow;
-  ctx.fillText(f,60+col*(fSize+fGap),fRowY+row*(fSize+16)+fSize*0.88);
+  ctx.fillText(f, 60+col*fStep, flY+56+row*96+fSz);
 });
-if(flags.length>maxFlags){
-  var extraY=fRowY+(Math.ceil(Math.min(flags.length,maxFlags)/fPerRow))*(fSize+16)+16;
-  ctx.fillStyle='rgba(160,190,230,0.55)';ctx.font='400 40px -apple-system,system-ui,Arial,sans-serif';
-  ctx.fillText('+'+(flags.length-maxFlags)+' more',60,extraY);
+if(flags.length>maxF){
+  ctx.fillStyle='rgba(132,174,224,0.52)';ctx.font='400 38px -apple-system,system-ui,Arial,sans-serif';
+  ctx.fillText('+'+(flags.length-maxF)+' more',60, flY+56+2*96+fSz+10);
 }
 
-// Footer
-ctx.fillStyle='rgba(255,255,255,0.18)';ctx.fillRect(0,H-90,W,90);
-ctx.fillStyle='rgba(200,220,255,0.45)';ctx.font='400 34px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='center';
-ctx.fillText('made with Travel Map',W/2,H-28);
+// ── Footer ────────────────────────────────────────────────────────────────────
+ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fillRect(0,H-84,W,84);
+ctx.fillStyle='rgba(172,208,255,0.36)';ctx.font='400 34px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='center';
+ctx.fillText('made with Travel Map',W/2,H-24);
 
-try{
-  send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/jpeg',0.90)}));
-}catch(e){
-  try{send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/png')}));}
-  catch(e2){send(JSON.stringify({type:'shareCardError',error:String(e2)}));}
-}
+try{send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/jpeg',0.92)}));}
+catch(e){try{send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/png')}));}catch(e2){send(JSON.stringify({type:'shareCardError',error:String(e2)}));}}
 })();
 </script></body></html>`;
 }
@@ -317,8 +333,8 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
         {status === "generating" && (
           <View style={styles.sheet}>
             <ActivityIndicator size="large" color="#60A5FA" />
-            <Text style={styles.title}>Drawing your globe…</Text>
-            <Text style={styles.sub}>Pinning your visited countries</Text>
+            <Text style={styles.title}>Creating your card…</Text>
+            <Text style={styles.sub}>Drawing globe and collecting your flags</Text>
             <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -342,9 +358,7 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
                 {status === "sharing" ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.shareBtnText}>
-                    Share your stats
-                  </Text>
+                  <Text style={styles.shareBtnText}>Share your stats</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
