@@ -84,7 +84,7 @@ function isOnFront(lng,lat){
 function drawLabels(){
   var zr=scaleR/baseR;
   if(zr<1.25)return;
-  var fs=Math.max(9,Math.min(16,Math.round(9*zr)));
+  var fs=Math.max(7,Math.min(10,Math.round(6*zr)));
   ctx.font=fs+'px -apple-system,BlinkMacSystemFont,sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.shadowColor='rgba(0,0,0,0.95)';ctx.shadowBlur=4;
@@ -126,20 +126,7 @@ function draw(){
   }
   ctx.beginPath();path({type:'Sphere'});
   ctx.strokeStyle='rgba(96,165,250,0.18)';ctx.lineWidth=1.5;ctx.stroke();
-  if(scaleR/baseR<1.25){
-    ctx.shadowColor='rgba(0,0,0,0.95)';ctx.shadowBlur=5;
-    ctx.font='18px serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    for(var name in visited){
-      if(!visited[name])continue;
-      var ce=centroids[name],fl=lookupFlag(name);
-      if(!ce||!fl||!isOnFront(ce.lng,ce.lat))continue;
-      var pt=proj([ce.lng,ce.lat]);
-      if(pt)ctx.fillText(fl,pt[0],pt[1]);
-    }
-    ctx.shadowBlur=0;
-  } else {
-    drawLabels();
-  }
+  drawLabels();
 }
 
 function tick(){if(autoRot){rot[0]+=0.15;draw();}requestAnimationFrame(tick);}
@@ -151,7 +138,7 @@ canvas.addEventListener('mousemove',function(e){if(!drag)return;var s=0.4*baseR/
 canvas.addEventListener('mouseup',function(){drag=false;resumeT=setTimeout(function(){autoRot=true;},4000);});
 
 // Mouse wheel zoom
-canvas.addEventListener('wheel',function(e){e.preventDefault();scaleR=Math.max(baseR*0.55,Math.min(baseR*5,scaleR*(e.deltaY<0?1.12:0.89)));draw();},{passive:false});
+canvas.addEventListener('wheel',function(e){e.preventDefault();scaleR=Math.max(baseR*0.88,Math.min(baseR*1.8,scaleR*(e.deltaY<0?1.08:0.93)));draw();},{passive:false});
 
 // Touch: 1-finger drag + 2-finger pinch zoom
 var lt,mv,pinching=false,pinchD0=0,pinchS0=0;
@@ -164,7 +151,7 @@ canvas.addEventListener('touchstart',function(e){
 canvas.addEventListener('touchmove',function(e){
   e.preventDefault();
   if(pinching&&e.touches.length>=2){
-    var d=pdist(e);if(pinchD0>0)scaleR=Math.max(baseR*0.55,Math.min(baseR*5,pinchS0*(d/pinchD0)));draw();
+    var d=pdist(e);if(pinchD0>0)scaleR=Math.max(baseR*0.88,Math.min(baseR*1.8,pinchS0*(d/pinchD0)));draw();
   } else if(!pinching&&e.touches.length===1){
     var t=e.touches[0],s=0.4*baseR/scaleR,dx=t.clientX-lt.clientX,dy=t.clientY-lt.clientY;
     rot[0]+=dx*s;rot[1]-=dy*s;rot[1]=Math.max(-80,Math.min(80,rot[1]));mv+=Math.abs(dx)+Math.abs(dy);lt=t;draw();
