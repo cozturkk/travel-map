@@ -392,7 +392,36 @@ export default function MapTab() {
   return (
     <View style={[styles.container, { backgroundColor: "#0F172A" }]}>
 
-      {/* ── Globe section ── */}
+      {/* ── Top bar ── sits above the globe, never overlaps it */}
+      <View style={[styles.topBar, { paddingTop: topPad, backgroundColor: "#0F172A" }]}>
+        <View style={styles.badgeInner}>
+          <Ionicons name="globe" size={15} color={colors.accent} />
+          <Text style={[styles.badgeCount, { color: colors.accent }]}>
+            {isLoading ? "—" : allVisited.length}
+          </Text>
+          {!isLoading && bucketList.length > 0 && (
+            <>
+              <View style={[styles.badgeDivider, { backgroundColor: colors.border }]} />
+              <Ionicons name="bookmark" size={13} color={colors.primary} />
+              <Text style={[styles.badgeCount, { color: colors.primary }]}>{bucketList.length}</Text>
+            </>
+          )}
+        </View>
+        {!isLoading && (allVisited.length > 0 || bucketList.length > 0) && mapReady && (
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShareVisible(true);
+            }}
+            activeOpacity={0.8}
+            style={styles.shareBtn}
+          >
+            <Ionicons name="share-outline" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* ── Globe section ── starts right below the top bar */}
       <View style={[styles.globeSection, { height: GLOBE_H }]}>
         {isWeb ? (
           <WebIframe srcDoc={GLOBE_HTML} iframeRef={iframeRef} />
@@ -413,43 +442,12 @@ export default function MapTab() {
 
         {/* Loading overlay */}
         {isLoading && (
-          <View style={[styles.loadingOverlay, { paddingTop: topPad }]}>
+          <View style={styles.loadingOverlay}>
             <ActivityIndicator size="small" color={colors.accent} />
             <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
               {progress.stage}{progress.total > 0 ? ` ${progress.current}/${progress.total}` : ""}
             </Text>
           </View>
-        )}
-
-        {/* Badge */}
-        {!isLoading && (
-          <View style={[styles.badge, { top: topPad + 12, backgroundColor: colors.card + "EE" }]}>
-            <View style={styles.badgeInner}>
-              <Ionicons name="globe" size={15} color={colors.accent} />
-              <Text style={[styles.badgeCount, { color: colors.accent }]}>{allVisited.length}</Text>
-              {bucketList.length > 0 && (
-                <>
-                  <View style={[styles.badgeDivider, { backgroundColor: colors.border }]} />
-                  <Ionicons name="bookmark" size={13} color={colors.primary} />
-                  <Text style={[styles.badgeCount, { color: colors.primary }]}>{bucketList.length}</Text>
-                </>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Share FAB */}
-        {(allVisited.length > 0 || bucketList.length > 0) && mapReady && (
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setShareVisible(true);
-            }}
-            style={[styles.shareFab, { top: topPad + 12, backgroundColor: colors.card + "EE" }]}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="share-outline" size={20} color={colors.foreground} />
-          </TouchableOpacity>
         )}
 
         {/* Tap hint */}
@@ -692,29 +690,24 @@ export default function MapTab() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
+  topBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingBottom: 10,
+  },
+  shareBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: "center", justifyContent: "center",
+  },
+
   globeSection: { position: "relative", overflow: "hidden" },
   webview: { flex: 1, backgroundColor: "#020C18" },
-  loadingOverlay: { position: "absolute", top: 0, left: 0, right: 0, alignItems: "center", gap: 6, paddingTop: 56 },
+  loadingOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 6 },
   loadingText: { fontSize: 12, fontFamily: "Inter_400Regular" },
 
-  badge: {
-    position: "absolute", left: 16, right: 16, borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 9,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
-  },
   badgeInner: { flexDirection: "row", alignItems: "center", gap: 5 },
   badgeCount: { fontSize: 17, fontFamily: "Inter_700Bold" },
   badgeLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
   badgeDivider: { width: 1, height: 14, marginHorizontal: 2 },
-
-  shareFab: {
-    position: "absolute", right: 16,
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35, shadowRadius: 8, elevation: 6,
-  },
   hint: {
     position: "absolute", alignSelf: "center",
     flexDirection: "row", alignItems: "center", gap: 6,
