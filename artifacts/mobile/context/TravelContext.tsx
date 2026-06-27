@@ -69,7 +69,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v5";
+const CACHE_KEY = "travel_data_v6";
 const MAX_PHOTOS = 2000;
 const BATCH_SIZE = 20;
 
@@ -266,19 +266,27 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           );
           if (results[0]) {
             const { country, city, region, subregion } = results[0];
-            // subregion is city-level on iOS (e.g. "London", "Paris")
-            // city can be neighborhood-level (e.g. "Morden", "Chelsea", "Montmartre")
-            // Strip admin prefixes and pick the more city-appropriate name
-            const cleanSub = subregion
-              ? subregion.replace(
-                  /^(Greater |Royal Borough of |London Borough of |City of |County of |Metropolitan Borough of )/i,
-                  ""
-                ).trim()
-              : null;
-            const cityName =
-              cleanSub && (!city || cleanSub.length <= city.length)
-                ? cleanSub
-                : (city ?? cleanSub ?? region ?? undefined);
+            // iOS locality (→ city) can be a neighbourhood: "Morden", "Chelsea"
+            // iOS subAdministrativeArea (→ subregion) is the wider admin area: "Greater London"
+            // Strategy: extract the meaningful city name from subregion patterns first
+            let cityName: string | undefined;
+            const greaterMatch = subregion?.match(/^Greater\s+(.+)$/i);
+            const adminOfMatch = subregion?.match(
+              /^(?:City|County|Royal Borough|London Borough|Metropolitan Borough|District)\s+of\s+(.+)$/i
+            );
+            if (greaterMatch) {
+              // "Greater London" → "London", "Greater Manchester" → "Manchester"
+              cityName = greaterMatch[1].trim();
+            } else if (adminOfMatch) {
+              // "City of Glasgow" → "Glasgow", "County of Durham" → "Durham"
+              cityName = adminOfMatch[1].trim();
+            } else {
+              // Prefer subregion if shorter/equal (borough vs tiny neighbourhood)
+              const sub = subregion?.trim() ?? null;
+              cityName = sub && (!city || sub.length <= city.length)
+                ? sub
+                : (city ?? sub ?? region ?? undefined);
+            }
             bucketPhotos.forEach((p) => {
               p.country = country ?? undefined;
               p.city = cityName;
