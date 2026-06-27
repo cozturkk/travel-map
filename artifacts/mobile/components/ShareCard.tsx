@@ -1,3 +1,18 @@
+import * as Sharing from "expo-sharing";
+
+// expo-file-system v19: the main export re-exports legacy stubs that THROW.
+// The real legacy API lives at the /legacy subpath.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const LegacyFS = require("expo-file-system/legacy") as {
+  cacheDirectory: string | null;
+  documentDirectory: string | null;
+  EncodingType: { Base64: "base64" };
+  writeAsStringAsync: (
+    uri: string,
+    contents: string,
+    options: { encoding: string }
+  ) => Promise<void>;
+};
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -93,51 +108,38 @@ ${CENTROIDS_JS}
 var W=1080,H=1920,GX=540,GY=610,GR=420;
 var cv=document.getElementById('c'),ctx=cv.getContext('2d');
 
-// Orthographic projection centred at 10°E 20°N
-var L0=10*Math.PI/180,P0=20*Math.PI/180;
 function proj(lat,lon){
+  var L0=10*Math.PI/180,P0=20*Math.PI/180;
   var p=lat*Math.PI/180,l=lon*Math.PI/180,dl=l-L0;
   var cosc=Math.sin(P0)*Math.sin(p)+Math.cos(P0)*Math.cos(p)*Math.cos(dl);
   if(cosc<0)return null;
   return[GX+GR*Math.cos(p)*Math.sin(dl), GY-GR*(Math.cos(P0)*Math.sin(p)-Math.sin(P0)*Math.cos(p)*Math.cos(dl))];
 }
-function send(m){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(m);else window.parent.postMessage(m,'*');}catch(e){}}
+function send(m){try{window.ReactNativeWebView.postMessage(m);}catch(e){try{window.parent.postMessage(m,'*');}catch(e2){}}}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 
-// Background
 ctx.fillStyle='#0F172A';ctx.fillRect(0,0,W,H);
 
-// Ambient glow
 var gl=ctx.createRadialGradient(GX,GY,GR*0.3,GX,GY,GR*1.6);
 gl.addColorStop(0,'rgba(96,165,250,0.08)');gl.addColorStop(1,'rgba(96,165,250,0)');
 ctx.fillStyle=gl;ctx.fillRect(0,0,W,H);
 
-// Ocean
 ctx.beginPath();ctx.arc(GX,GY,GR,0,Math.PI*2);
 var oc=ctx.createRadialGradient(GX-60,GY-70,0,GX,GY,GR);
 oc.addColorStop(0,'#1e3f6e');oc.addColorStop(1,'#0d1e34');
 ctx.fillStyle=oc;ctx.fill();
 
-// Grid lines
-function gline(pts){
-  var on=false;ctx.beginPath();
-  pts.forEach(function(pt){if(!pt){on=false;return;}if(!on){ctx.moveTo(pt[0],pt[1]);on=true;}else ctx.lineTo(pt[0],pt[1]);});
-  ctx.stroke();
-}
+function gline(pts){var on=false;ctx.beginPath();pts.forEach(function(pt){if(!pt){on=false;return;}if(!on){ctx.moveTo(pt[0],pt[1]);on=true;}else ctx.lineTo(pt[0],pt[1]);});ctx.stroke();}
 ctx.strokeStyle='rgba(96,165,250,0.13)';ctx.lineWidth=1.3;
 [-60,-30,0,30,60].forEach(function(lat){var a=[];for(var lo=-180;lo<=180;lo+=3)a.push(proj(lat,lo));gline(a);});
 [-150,-120,-90,-60,-30,0,30,60,90,120,150,180].forEach(function(lo){var a=[];for(var la=-88;la<=88;la+=3)a.push(proj(la,lo));gline(a);});
 
-// All-country ghost dots (tiny, only if not visited)
 Object.keys(C).forEach(function(name){
   if(D.visited.indexOf(name)>=0)return;
-  var cd=C[name],pt=proj(cd[0],cd[1]);
-  if(!pt)return;
-  ctx.beginPath();ctx.arc(pt[0],pt[1],5,0,Math.PI*2);
-  ctx.fillStyle='rgba(96,165,250,0.20)';ctx.fill();
+  var cd=C[name],pt=proj(cd[0],cd[1]);if(!pt)return;
+  ctx.beginPath();ctx.arc(pt[0],pt[1],5,0,Math.PI*2);ctx.fillStyle='rgba(96,165,250,0.20)';ctx.fill();
 });
 
-// Visited country dots (amber glow)
 D.visited.forEach(function(name){
   var cd=C[name];if(!cd)return;
   var pt=proj(cd[0],cd[1]);if(!pt)return;
@@ -146,25 +148,21 @@ D.visited.forEach(function(name){
   ctx.beginPath();ctx.arc(pt[0],pt[1],6,0,Math.PI*2);ctx.fillStyle='#FED7AA';ctx.fill();
 });
 
-// Globe rim
 ctx.beginPath();ctx.arc(GX,GY,GR,0,Math.PI*2);
 var rim=ctx.createLinearGradient(GX-GR,GY,GX+GR,GY);
 rim.addColorStop(0,'rgba(96,165,250,0.5)');rim.addColorStop(0.5,'rgba(96,165,250,0.1)');rim.addColorStop(1,'rgba(96,165,250,0.45)');
 ctx.strokeStyle=rim;ctx.lineWidth=2.5;ctx.stroke();
 
-// Header overlay
 ctx.fillStyle='rgba(15,23,42,0.72)';ctx.fillRect(0,0,W,190);
 ctx.fillStyle='#60A5FA';ctx.font='bold 52px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='left';
 ctx.fillText('TRAVEL MAP',60,112);
 var ag=ctx.createLinearGradient(60,0,440,0);ag.addColorStop(0,'#60A5FA');ag.addColorStop(1,'rgba(96,165,250,0)');
 ctx.fillStyle=ag;ctx.fillRect(60,130,380,3);
 
-// Bottom fade
 var fd=ctx.createLinearGradient(0,GY+GR*0.3,0,H);
 fd.addColorStop(0,'rgba(15,23,42,0)');fd.addColorStop(0.18,'rgba(15,23,42,0.92)');fd.addColorStop(0.28,'rgba(15,23,42,1)');fd.addColorStop(1,'rgba(15,23,42,1)');
 ctx.fillStyle=fd;ctx.fillRect(0,GY+GR*0.28,W,H-GY-GR*0.28);
 
-// Big number
 var sY=1080,ns=String(D.countries),fs=ns.length<=1?260:ns.length<=2?230:200;
 var ng=ctx.createLinearGradient(0,sY,0,sY+fs);ng.addColorStop(0,'#FB923C');ng.addColorStop(1,'#EA580C');
 ctx.fillStyle=ng;ctx.font='bold '+fs+'px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='center';
@@ -172,7 +170,6 @@ ctx.fillText(ns,W/2,sY+fs*0.82);
 ctx.fillStyle='rgba(248,250,252,0.40)';ctx.font='400 50px -apple-system,system-ui,Arial,sans-serif';
 ctx.fillText('countries explored',W/2,sY+fs+24);
 
-// Stat boxes
 var by=sY+fs+102,bw=(W-108-60)/4,bh=155;
 [{v:D.streak>0?D.streak+' mo':'-',l:'STREAK',c:'#F97316'},{v:D.best>0?D.best+' mo':'-',l:'BEST',c:'#A78BFA'},{v:D.months>0?String(D.months):'-',l:'MONTHS',c:'#60A5FA'},{v:String(D.bucket),l:'BUCKET',c:'#34D399'}]
 .forEach(function(b,i){
@@ -184,7 +181,6 @@ var by=sY+fs+102,bw=(W-108-60)/4,bh=155;
   ctx.fillText(b.l,bx+bw/2,by+140);
 });
 
-// Country list
 if(D.visited.length>0){
   var ly=by+bh+68;
   ctx.textAlign='left';ctx.fillStyle='rgba(100,116,139,0.72)';ctx.font='600 28px -apple-system,system-ui,Arial,sans-serif';
@@ -200,15 +196,17 @@ if(D.visited.length>0){
   }
 }
 
-// Footer
 ctx.fillStyle='rgba(96,165,250,0.1)';ctx.fillRect(0,H-80,W,80);
 ctx.fillStyle='rgba(248,250,252,0.3)';ctx.font='400 28px -apple-system,system-ui,Arial,sans-serif';ctx.textAlign='center';
 ctx.fillText('Travel Map \u2014 Track your world adventures',W/2,H-24);
 
-// Export
-try{send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/jpeg',0.88)}));}
-catch(e){try{send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/png')}));}
-catch(e2){send(JSON.stringify({type:'shareCardError',error:String(e2)}));}}
+try{
+  var url=cv.toDataURL('image/jpeg',0.88);
+  send(JSON.stringify({type:'shareCardReady',data:url}));
+}catch(e){
+  try{send(JSON.stringify({type:'shareCardReady',data:cv.toDataURL('image/png')}));}
+  catch(e2){send(JSON.stringify({type:'shareCardError',error:String(e2)}));}
+}
 })();
 </script></body></html>`;
 }
@@ -219,61 +217,76 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
   const [status, setStatus] = useState<Status>("generating");
   const [imageUri, setImageUri] = useState<string | null>(null);
   const fileUriRef = useRef<string | null>(null);
-  const mimeRef = useRef<string>("image/jpeg");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (visible) { setStatus("generating"); setImageUri(null); fileUriRef.current = null; }
+    if (visible) {
+      setStatus("generating");
+      setImageUri(null);
+      fileUriRef.current = null;
+    }
   }, [visible]);
 
-  const handleMessage = useCallback(async (event: { nativeEvent: { data: string } }) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    try {
-      const msg = JSON.parse(event.nativeEvent.data);
-      if (msg.type === "shareCardReady" && msg.data) {
-        const FileSystem = await import("expo-file-system");
-        const isJpeg = (msg.data as string).startsWith("data:image/jpeg");
-        const ext = isJpeg ? "jpg" : "png";
-        mimeRef.current = isJpeg ? "image/jpeg" : "image/png";
-        const base64 = (msg.data as string).replace(/^data:image\/\w+;base64,/, "");
-        const fileUri = FileSystem.default.cacheDirectory + `travel-share.${ext}`;
-        await FileSystem.default.writeAsStringAsync(fileUri, base64, {
-          encoding: FileSystem.default.EncodingType.Base64,
-        });
-        fileUriRef.current = fileUri;
-        setImageUri(msg.data);
-        setStatus("preview");
-      } else if (msg.type === "shareCardError") {
-        throw new Error(msg.error);
+  const handleMessage = useCallback(
+    async (event: { nativeEvent: { data: string } }) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      try {
+        const msg = JSON.parse(event.nativeEvent.data) as {
+          type: string;
+          data?: string;
+          error?: string;
+        };
+
+        if (msg.type === "shareCardReady" && msg.data) {
+          const isJpeg = msg.data.startsWith("data:image/jpeg");
+          const ext = isJpeg ? "jpg" : "png";
+          const base64 = msg.data.replace(/^data:image\/\w+;base64,/, "");
+          const cacheDir = LegacyFS.cacheDirectory ?? LegacyFS.documentDirectory ?? "";
+          const fileUri = cacheDir + `travel-share.${ext}`;
+          await LegacyFS.writeAsStringAsync(fileUri, base64, {
+            encoding: LegacyFS.EncodingType.Base64,
+          });
+          fileUriRef.current = fileUri;
+          setImageUri(msg.data);
+          setStatus("preview");
+        } else if (msg.type === "shareCardError") {
+          throw new Error(msg.error ?? "Unknown error");
+        }
+      } catch (err) {
+        console.error("[ShareCard] handleMessage error:", err);
+        Alert.alert(
+          "Share failed",
+          `Could not create the share card: ${err instanceof Error ? err.message : String(err)}`
+        );
+        onClose();
       }
-    } catch {
-      Alert.alert("Share failed", "Could not create the share card. Please try again.");
-      onClose();
-    }
-  }, [onClose]);
+    },
+    [onClose]
+  );
 
   const handleWebViewLoad = useCallback(() => {
     timerRef.current = setTimeout(() => {
       Alert.alert("Timeout", "Took too long to generate. Please try again.");
       onClose();
-    }, 20000);
+    }, 25000);
   }, [onClose]);
 
   const handleShare = useCallback(async () => {
     if (!fileUriRef.current) return;
     try {
       setStatus("sharing");
-      const Sharing = await import("expo-sharing");
-      const canShare = await Sharing.default.isAvailableAsync();
+      const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.default.shareAsync(fileUriRef.current, {
-          mimeType: mimeRef.current,
+        await Sharing.shareAsync(fileUriRef.current, {
+          mimeType: "image/jpeg",
           dialogTitle: "Share your travel map",
           UTI: "public.jpeg",
         });
       } else {
-        Alert.alert("Saved", "Image saved to cache.");
+        Alert.alert("Saved", "Image saved to cache. Open Files to find it.");
       }
+    } catch (err) {
+      console.error("[ShareCard] share error:", err);
     } finally {
       onClose();
     }
@@ -324,7 +337,11 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
 
         {(status === "preview" || status === "sharing") && imageUri && (
           <View style={styles.previewWrap}>
-            <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="contain" />
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.previewImage}
+              resizeMode="contain"
+            />
             <View style={styles.previewActions}>
               <TouchableOpacity
                 onPress={handleShare}
@@ -332,9 +349,13 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
                 activeOpacity={0.8}
                 disabled={status === "sharing"}
               >
-                {status === "sharing"
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.shareBtnText}>Share to WhatsApp / Instagram</Text>}
+                {status === "sharing" ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.shareBtnText}>
+                    Share to WhatsApp / Instagram
+                  </Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -351,7 +372,12 @@ const PREVIEW_W = 260;
 const PREVIEW_H = Math.round(PREVIEW_W * (1920 / 1080));
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.88)", alignItems: "center", justifyContent: "center" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.88)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   hiddenWebView: {
     position: "absolute",
     width: 1080,
@@ -362,26 +388,64 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.001 }],
   },
   sheet: {
-    backgroundColor: "#1E293B", borderRadius: 24, padding: 32, width: 300,
-    alignItems: "center", gap: 12,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24, elevation: 12,
+    backgroundColor: "#1E293B",
+    borderRadius: 24,
+    padding: 32,
+    width: 300,
+    alignItems: "center",
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    elevation: 12,
   },
   previewWrap: { alignItems: "center", gap: 16, paddingHorizontal: 16 },
   previewImage: {
-    width: PREVIEW_W, height: PREVIEW_H, borderRadius: 16,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.6, shadowRadius: 20,
+    width: PREVIEW_W,
+    height: PREVIEW_H,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
   },
   previewActions: { alignItems: "center", gap: 4 },
   shareBtn: {
-    backgroundColor: "#60A5FA", paddingVertical: 14, paddingHorizontal: 28,
-    borderRadius: 16, minWidth: 240, alignItems: "center",
-    shadowColor: "#60A5FA", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
+    backgroundColor: "#60A5FA",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 16,
+    minWidth: 240,
+    alignItems: "center",
+    shadowColor: "#60A5FA",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
   },
   shareBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  title: { fontSize: 18, fontFamily: "Inter_600SemiBold", color: "#F1F5F9", textAlign: "center", marginTop: 8 },
-  sub: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center", lineHeight: 20 },
+  title: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F1F5F9",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  sub: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 20,
+  },
   cancelBtn: { marginTop: 4, paddingVertical: 10, paddingHorizontal: 24 },
   cancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: "#64748B" },
-  closeBtn: { marginTop: 8, backgroundColor: "#0F172A", paddingVertical: 12, paddingHorizontal: 28, borderRadius: 12 },
+  closeBtn: {
+    marginTop: 8,
+    backgroundColor: "#0F172A",
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+  },
   closeBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#F1F5F9" },
 });
