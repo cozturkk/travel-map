@@ -223,7 +223,7 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
         {/* Hidden WebView renders the globe card */}
         {status === "generating" && (
           <WebView
-            source={{ html: buildHTML(stats) }}
+            source={{ html: buildHTML(stats), baseUrl: "https://www.google.com" }}
             onMessage={handleMessage}
             onLoad={handleWebViewLoad}
             javaScriptEnabled
