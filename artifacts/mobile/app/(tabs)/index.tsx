@@ -277,7 +277,8 @@ export default function MapTab() {
     streak: travelStreaks.current,
     best: travelStreaks.longest,
     months: travelStreaks.total,
-  }), [allVisited.length, bucketList.length, travelStreaks]);
+    visitedCountries: allVisited,
+  }), [allVisited, bucketList.length, travelStreaks]);
 
   const [detailCountry, setDetailCountry] = useState<CountryVisit | null>(null);
   const [detailModal, setDetailModal] = useState(false);
