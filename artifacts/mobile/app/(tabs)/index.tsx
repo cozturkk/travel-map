@@ -11,12 +11,15 @@ import React, {
 import {
   ActivityIndicator,
   Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -28,6 +31,7 @@ import { useBucketList } from "@/context/BucketListContext";
 import PermissionGate from "@/components/PermissionGate";
 import ShareCard, { ShareStats } from "@/components/ShareCard";
 import { buildMonthMap, calcStreaks } from "@/utils/travelStats";
+import { WORLD_COUNTRIES } from "@/data/worldCountries";
 import { CC_JS, countryToFlag } from "@/utils/countryFlags";
 
 const MANUAL_VISITED_KEY = "manual_visited_v1";
@@ -283,6 +287,8 @@ export default function MapTab() {
   const [manualDetailModal, setManualDetailModal] = useState(false);
   const [bucketActionCountry, setBucketActionCountry] = useState<string | null>(null);
   const [bucketActionModal, setBucketActionModal] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
@@ -407,18 +413,24 @@ export default function MapTab() {
             </>
           )}
         </View>
-        {!isLoading && (allVisited.length > 0 || bucketList.length > 0) && mapReady && (
+        <View style={styles.topBarRight}>
           <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setShareVisible(true);
-            }}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSearchVisible(true); }}
             activeOpacity={0.8}
             style={styles.shareBtn}
           >
-            <Ionicons name="share-outline" size={20} color={colors.foreground} />
+            <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
           </TouchableOpacity>
-        )}
+          {!isLoading && (allVisited.length > 0 || bucketList.length > 0) && mapReady && (
+            <TouchableOpacity
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareVisible(true); }}
+              activeOpacity={0.8}
+              style={styles.shareBtn}
+            >
+              <Ionicons name="share-outline" size={20} color={colors.foreground} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* ── Globe section ── starts right below the top bar */}
@@ -629,6 +641,93 @@ export default function MapTab() {
         </Pressable>
       </Modal>
 
+      {/* ── Country search modal ── */}
+      <Modal visible={searchVisible} transparent animationType="slide" onRequestClose={() => { setSearchVisible(false); setSearchQuery(""); }}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <Pressable style={styles.modalOverlay} onPress={() => { setSearchVisible(false); setSearchQuery(""); }}>
+            <Pressable style={[styles.searchSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+              <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+              <Text style={[styles.searchTitle, { color: colors.foreground }]}>Add Country</Text>
+              <View style={[styles.searchInputWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Ionicons name="search" size={16} color={colors.mutedForeground} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.foreground }]}
+                  placeholder="Search country…"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                  autoCorrect={false}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <FlatList
+                data={WORLD_COUNTRIES.filter(c =>
+                  searchQuery.trim().length === 0
+                    ? false
+                    : c.toLowerCase().includes(searchQuery.trim().toLowerCase())
+                )}
+                keyExtractor={item => item}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 340 }}
+                ListEmptyComponent={
+                  searchQuery.trim().length > 0 ? (
+                    <Text style={[styles.searchEmpty, { color: colors.mutedForeground }]}>No countries found</Text>
+                  ) : (
+                    <Text style={[styles.searchEmpty, { color: colors.mutedForeground }]}>Start typing a country name</Text>
+                  )
+                }
+                renderItem={({ item: country }) => {
+                  const visited = allVisited.includes(country);
+                  const bucketed = isInBucket(country);
+                  return (
+                    <View style={[styles.searchRow, { borderTopColor: colors.border }]}>
+                      <Text style={[styles.searchRowName, { color: colors.foreground }]}>
+                        {countryToFlag(country)} {country}
+                      </Text>
+                      <View style={styles.searchRowBtns}>
+                        <TouchableOpacity
+                          style={[styles.searchActionBtn, { backgroundColor: visited ? colors.accent + "33" : colors.background }]}
+                          onPress={() => {
+                            if (visited) return;
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            setManuallyVisited(prev => [...new Set([...prev, country])]);
+                            sendToMap({ type: "markVisited", country });
+                          }}
+                          activeOpacity={visited ? 1 : 0.7}
+                        >
+                          <Ionicons name={visited ? "checkmark-circle" : "checkmark-circle-outline"} size={16} color={visited ? colors.accent : colors.mutedForeground} />
+                          <Text style={[styles.searchActionLabel, { color: visited ? colors.accent : colors.mutedForeground }]}>
+                            {visited ? "Visited" : "Been here"}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.searchActionBtn, { backgroundColor: bucketed ? colors.primary + "33" : colors.background }]}
+                          onPress={() => {
+                            if (bucketed) { removeFromBucket(country); sendToMap({ type: "unmarkBucket", country }); }
+                            else { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); addToBucket(country); sendToMap({ type: "markBucket", country }); }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name={bucketed ? "bookmark" : "bookmark-outline"} size={15} color={bucketed ? colors.primary : colors.mutedForeground} />
+                          <Text style={[styles.searchActionLabel, { color: bucketed ? colors.primary : colors.mutedForeground }]}>
+                            {bucketed ? "Saved" : "Bucket list"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* ── Trip detail modal ── */}
       <Modal visible={detailModal} transparent animationType="slide" onRequestClose={() => setDetailModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setDetailModal(false)}>
@@ -694,10 +793,36 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 18, paddingBottom: 10,
   },
+  topBarRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   shareBtn: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: "center", justifyContent: "center",
   },
+
+  searchSheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 20, paddingTop: 12,
+    marginTop: "auto",
+  },
+  searchTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 14, marginTop: 4 },
+  searchInputWrap: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 12, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8,
+  },
+  searchInput: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", padding: 0 },
+  searchEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 24 },
+  searchRow: {
+    flexDirection: "row", alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 12, gap: 8,
+  },
+  searchRowName: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
+  searchRowBtns: { flexDirection: "row", gap: 6 },
+  searchActionBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  searchActionLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
 
   globeSection: { position: "relative", overflow: "hidden" },
   webview: { flex: 1, backgroundColor: "#020C18" },
