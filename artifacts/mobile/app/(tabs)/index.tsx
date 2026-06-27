@@ -132,7 +132,7 @@ canvas.addEventListener('mousemove',function(e){if(!drag)return;var s=0.4*baseR/
 canvas.addEventListener('mouseup',function(){drag=false;resumeT=setTimeout(function(){autoRot=true;},4000);});
 
 // Mouse wheel zoom
-canvas.addEventListener('wheel',function(e){e.preventDefault();scaleR=Math.max(baseR*0.88,Math.min(baseR*3,scaleR*(e.deltaY<0?1.08:0.93)));draw();},{passive:false});
+canvas.addEventListener('wheel',function(e){e.preventDefault();scaleR=Math.max(baseR*0.88,Math.min(baseR*3.5,scaleR*(e.deltaY<0?1.08:0.93)));draw();},{passive:false});
 
 // Touch: 1-finger drag + 2-finger pinch zoom
 var lt,mv,pinching=false,pinchD0=0,pinchS0=0;
@@ -145,7 +145,7 @@ canvas.addEventListener('touchstart',function(e){
 canvas.addEventListener('touchmove',function(e){
   e.preventDefault();
   if(pinching&&e.touches.length>=2){
-    var d=pdist(e);if(pinchD0>0)scaleR=Math.max(baseR*0.88,Math.min(baseR*3,pinchS0*(d/pinchD0)));draw();
+    var d=pdist(e);if(pinchD0>0)scaleR=Math.max(baseR*0.88,Math.min(baseR*3.5,pinchS0*(d/pinchD0)));draw();
   } else if(!pinching&&e.touches.length===1){
     var t=e.touches[0],s=0.4*baseR/scaleR,dx=t.clientX-lt.clientX,dy=t.clientY-lt.clientY;
     rot[0]+=dx*s;rot[1]-=dy*s;rot[1]=Math.max(-80,Math.min(80,rot[1]));mv+=Math.abs(dx)+Math.abs(dy);lt=t;draw();
@@ -477,7 +477,7 @@ export default function MapTab() {
             value={`${pct}%`}
             label="of the world"
             icon="🌍"
-            bg="#bf7a19"
+            bg="#96bf0f"
           />
         </View>
 
