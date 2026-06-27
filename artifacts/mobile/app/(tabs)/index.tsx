@@ -152,7 +152,11 @@ canvas.addEventListener('touchmove',function(e){
   }
 },{passive:false});
 canvas.addEventListener('touchend',function(e){
-  if(e.touches.length<2)pinching=false;
+  if(e.touches.length<2){
+    pinching=false;
+    // Reset drag anchor so a re-pinch or continued drag doesn't jump
+    if(e.touches.length===1){lt=e.touches[0];mv=0;}
+  }
   if(e.touches.length===0){
     if(mv<6){var t=e.changedTouches[0],r=canvas.getBoundingClientRect();handleTap(t.clientX-r.left,t.clientY-r.top);}
     resumeT=setTimeout(function(){autoRot=true;},4000);
@@ -401,6 +405,7 @@ export default function MapTab() {
             javaScriptEnabled
             domStorageEnabled
             allowsInlineMediaPlayback
+            scrollEnabled={false}
             onMessage={handleWebViewMessage}
             onError={() => {}}
           />
