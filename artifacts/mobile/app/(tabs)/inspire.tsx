@@ -23,6 +23,7 @@ import {
   DistancePref,
   TravelStyle,
   getRecommendations,
+  haversineKm,
 } from "@/data/destinations";
 import { useState } from "react";
 
@@ -42,10 +43,44 @@ const STYLE_OPTIONS: { id: TravelStyle; label: string; icon: string }[] = [
 ];
 
 const DISTANCE_OPTIONS: { id: DistancePref; label: string; sublabel: string }[] = [
-  { id: "short", label: "Short haul", sublabel: "< 3 hours" },
-  { id: "medium", label: "Medium haul", sublabel: "3–6 hours" },
-  { id: "long", label: "Long haul", sublabel: "6h+" },
+  { id: "short", label: "Short haul", sublabel: "< 2,000 km" },
+  { id: "medium", label: "Medium haul", sublabel: "2,000–5,000 km" },
+  { id: "long", label: "Long haul", sublabel: "5,000+ km" },
   { id: "any", label: "Any", sublabel: "Surprise me" },
+];
+
+interface DepartureCity {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+const DEPARTURE_CITIES: DepartureCity[] = [
+  { name: "London", lat: 51.51, lon: -0.13 },
+  { name: "New York", lat: 40.71, lon: -74.01 },
+  { name: "Paris", lat: 48.86, lon: 2.35 },
+  { name: "Tokyo", lat: 35.69, lon: 139.69 },
+  { name: "Sydney", lat: -33.87, lon: 151.21 },
+  { name: "Dubai", lat: 25.20, lon: 55.27 },
+  { name: "Singapore", lat: 1.35, lon: 103.82 },
+  { name: "Los Angeles", lat: 34.05, lon: -118.24 },
+  { name: "Toronto", lat: 43.65, lon: -79.38 },
+  { name: "Amsterdam", lat: 52.37, lon: 4.90 },
+  { name: "Frankfurt", lat: 50.11, lon: 8.68 },
+  { name: "Hong Kong", lat: 22.32, lon: 114.17 },
+  { name: "São Paulo", lat: -23.55, lon: -46.63 },
+  { name: "Mumbai", lat: 19.08, lon: 72.88 },
+  { name: "Cape Town", lat: -33.93, lon: 18.42 },
+  { name: "Mexico City", lat: 19.43, lon: -99.13 },
+  { name: "Seoul", lat: 37.57, lon: 126.98 },
+  { name: "Bangkok", lat: 13.76, lon: 100.50 },
+  { name: "Madrid", lat: 40.42, lon: -3.70 },
+  { name: "Chicago", lat: 41.88, lon: -87.63 },
+  { name: "Zurich", lat: 47.38, lon: 8.54 },
+  { name: "Stockholm", lat: 59.33, lon: 18.07 },
+  { name: "Johannesburg", lat: -26.20, lon: 28.04 },
+  { name: "Auckland", lat: -36.87, lon: 174.77 },
+  { name: "Beijing", lat: 39.91, lon: 116.39 },
 ];
 
 function StyleChip({
@@ -91,11 +126,20 @@ function StyleChip({
 function DestinationCard({
   dest,
   index,
+  fromKm,
 }: {
   dest: Destination;
   index: number;
+  fromKm?: number;
 }) {
   const colors = useColors();
+
+  function fmtDistance(km: number) {
+    const hrs = Math.round(km / 800);
+    if (hrs <= 1) return "~1h flight";
+    return `~${hrs}h flight`;
+  }
+
   return (
     <Animated.View
       entering={FadeInDown.delay(index * 120).springify()}
@@ -141,7 +185,9 @@ function DestinationCard({
           <View style={[styles.metaTag, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
             <Ionicons name="airplane-outline" size={12} color="rgba(255,255,255,0.7)" />
             <Text style={styles.metaTagText}>
-              {dest.distanceTag === "short" ? "< 3h" : dest.distanceTag === "medium" ? "3–6h" : "6h+"}
+              {fromKm != null
+                ? fmtDistance(fromKm)
+                : dest.distanceTag === "short" ? "< 2,000 km" : dest.distanceTag === "medium" ? "2–5,000 km" : "5,000+ km"}
             </Text>
           </View>
         </View>
@@ -158,12 +204,16 @@ export default function InspireTab() {
   const [selectedStyles, setSelectedStyles] = useState<TravelStyle[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedDistance, setSelectedDistance] = useState<DistancePref>("any");
+  const [selectedCityIdx, setSelectedCityIdx] = useState<number | null>(null);
   const [results, setResults] = useState<Destination[] | null>(null);
+  const [resultDistances, setResultDistances] = useState<(number | undefined)[]>([]);
   const [loading, setLoading] = useState(false);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
   const bottomPad = insets.bottom + 80;
+
+  const selectedCity = selectedCityIdx !== null ? DEPARTURE_CITIES[selectedCityIdx] : null;
 
   function toggleStyle(style: TravelStyle) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -178,11 +228,18 @@ export default function InspireTab() {
     setLoading(true);
     setResults(null);
     setTimeout(() => {
+      const startCoords: [number, number] | null = selectedCity
+        ? [selectedCity.lat, selectedCity.lon]
+        : null;
       const recs = getRecommendations(
-        { styles: selectedStyles, month: selectedMonth, distance: selectedDistance },
+        { styles: selectedStyles, month: selectedMonth, distance: selectedDistance, startCoords },
         visitedCountryNames
       );
+      const distances = startCoords
+        ? recs.map((d) => Math.round(haversineKm(startCoords[0], startCoords[1], d.lat, d.lon)))
+        : recs.map(() => undefined);
       setResults(recs);
+      setResultDistances(distances);
       setLoading(false);
     }, 800);
   }
@@ -277,11 +334,78 @@ export default function InspireTab() {
               </ScrollView>
             </View>
 
+            {/* Departure city */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Where are you flying from?
+              </Text>
+              <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
+                Optional — enables precise distance filtering
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.cityRow}
+              >
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSelectedCityIdx(null);
+                  }}
+                  style={[
+                    styles.cityChip,
+                    {
+                      backgroundColor: selectedCityIdx === null ? colors.card : "transparent",
+                      borderColor: selectedCityIdx === null ? colors.foreground : colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[
+                    styles.cityChipText,
+                    { color: selectedCityIdx === null ? colors.foreground : colors.mutedForeground },
+                  ]}>
+                    Anywhere
+                  </Text>
+                </Pressable>
+                {DEPARTURE_CITIES.map((city, idx) => {
+                  const selected = selectedCityIdx === idx;
+                  return (
+                    <Pressable
+                      key={city.name}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedCityIdx(selected ? null : idx);
+                      }}
+                      style={[
+                        styles.cityChip,
+                        {
+                          backgroundColor: selected ? colors.primary : "transparent",
+                          borderColor: selected ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[
+                        styles.cityChipText,
+                        { color: selected ? colors.primaryForeground : colors.mutedForeground },
+                      ]}>
+                        {city.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             {/* Distance */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
                 How far do you want to fly?
               </Text>
+              {selectedCity && (
+                <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
+                  Distances from {selectedCity.name}
+                </Text>
+              )}
               <View style={styles.distanceGrid}>
                 {DISTANCE_OPTIONS.map((opt) => {
                   const selected = selectedDistance === opt.id;
@@ -378,12 +502,18 @@ export default function InspireTab() {
               </Text>
               <Text style={[styles.resultsSub, { color: colors.mutedForeground }]}>
                 {MONTHS[selectedMonth - 1]} · {selectedStyles.map((s) => STYLE_OPTIONS.find((o) => o.id === s)?.label).join(", ")}
+                {selectedCity ? ` · from ${selectedCity.name}` : ""}
               </Text>
             </View>
 
             <View style={{ paddingHorizontal: 20, gap: 16 }}>
               {results.map((dest, i) => (
-                <DestinationCard key={dest.id} dest={dest} index={i} />
+                <DestinationCard
+                  key={dest.id}
+                  dest={dest}
+                  index={i}
+                  fromKm={resultDistances[i]}
+                />
               ))}
             </View>
 
@@ -476,6 +606,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   monthText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  cityRow: {
+    gap: 8,
+    paddingVertical: 4,
+    marginTop: 4,
+  },
+  cityChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  cityChipText: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },

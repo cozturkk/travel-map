@@ -22,6 +22,20 @@ export interface Destination {
   badMonths: number[];
   distanceTag: DistanceTag;
   cardGradient: [string, string];
+  lat: number;
+  lon: number;
+}
+
+export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
 }
 
 export const DESTINATIONS: Destination[] = [
@@ -38,6 +52,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [5, 6, 7, 8, 9, 10],
     distanceTag: "long",
     cardGradient: ["#0E7490", "#164E63"],
+    lat: 4.18, lon: 73.51,
   },
   {
     id: "bali",
@@ -51,6 +66,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [1, 2, 3],
     distanceTag: "long",
     cardGradient: ["#92400E", "#78350F"],
+    lat: -8.34, lon: 115.09,
   },
   {
     id: "santorini",
@@ -64,6 +80,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [11, 12, 1, 2],
     distanceTag: "medium",
     cardGradient: ["#3730A3", "#1E1B4B"],
+    lat: 36.39, lon: 25.46,
   },
   {
     id: "tulum",
@@ -77,6 +94,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [9, 10],
     distanceTag: "medium",
     cardGradient: ["#065F46", "#064E3B"],
+    lat: 20.21, lon: -87.47,
   },
   {
     id: "seychelles",
@@ -90,6 +108,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8],
     distanceTag: "long",
     cardGradient: ["#0F766E", "#134E4A"],
+    lat: -4.68, lon: 55.49,
   },
   {
     id: "amalfi",
@@ -103,6 +122,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [12, 1, 2],
     distanceTag: "medium",
     cardGradient: ["#9F1239", "#881337"],
+    lat: 40.63, lon: 14.60,
   },
   {
     id: "zanzibar",
@@ -116,6 +136,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [3, 4, 5],
     distanceTag: "long",
     cardGradient: ["#1D4ED8", "#1E3A8A"],
+    lat: -6.17, lon: 39.20,
   },
   // ADVENTURE
   {
@@ -130,6 +151,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [],
     distanceTag: "long",
     cardGradient: ["#7C3AED", "#5B21B6"],
+    lat: -45.03, lon: 168.66,
   },
   {
     id: "patagonia",
@@ -143,6 +165,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8],
     distanceTag: "long",
     cardGradient: ["#1E40AF", "#1E3A8A"],
+    lat: -50.94, lon: -73.39,
   },
   {
     id: "iceland",
@@ -156,6 +179,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [],
     distanceTag: "medium",
     cardGradient: ["#0F172A", "#1E293B"],
+    lat: 64.96, lon: -19.02,
   },
   {
     id: "nepal",
@@ -169,6 +193,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8],
     distanceTag: "long",
     cardGradient: ["#B45309", "#92400E"],
+    lat: 27.72, lon: 85.31,
   },
   {
     id: "costa-rica",
@@ -182,6 +207,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [9, 10],
     distanceTag: "medium",
     cardGradient: ["#166534", "#14532D"],
+    lat: 9.75, lon: -83.75,
   },
   {
     id: "jordan",
@@ -195,6 +221,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [7, 8],
     distanceTag: "medium",
     cardGradient: ["#78350F", "#451A03"],
+    lat: 30.33, lon: 35.44,
   },
   {
     id: "peru",
@@ -208,6 +235,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [1, 2, 3],
     distanceTag: "long",
     cardGradient: ["#92400E", "#78350F"],
+    lat: -13.16, lon: -72.55,
   },
   // CULTURE
   {
@@ -222,6 +250,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [7, 8],
     distanceTag: "long",
     cardGradient: ["#BE185D", "#9D174D"],
+    lat: 35.01, lon: 135.77,
   },
   {
     id: "istanbul",
@@ -235,6 +264,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [1, 2],
     distanceTag: "medium",
     cardGradient: ["#7C3AED", "#5B21B6"],
+    lat: 41.02, lon: 28.98,
   },
   {
     id: "marrakech",
@@ -248,6 +278,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [7, 8],
     distanceTag: "medium",
     cardGradient: ["#B45309", "#78350F"],
+    lat: 31.63, lon: -7.99,
   },
   {
     id: "rome",
@@ -261,6 +292,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [7, 8],
     distanceTag: "medium",
     cardGradient: ["#9F1239", "#881337"],
+    lat: 41.90, lon: 12.50,
   },
   {
     id: "havana",
@@ -274,6 +306,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [8, 9, 10],
     distanceTag: "medium",
     cardGradient: ["#DC2626", "#991B1B"],
+    lat: 23.14, lon: -82.36,
   },
   {
     id: "angkor",
@@ -287,6 +320,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8, 9],
     distanceTag: "long",
     cardGradient: ["#78350F", "#92400E"],
+    lat: 13.41, lon: 103.87,
   },
   // SKI
   {
@@ -301,6 +335,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [5, 6, 7, 8, 9],
     distanceTag: "medium",
     cardGradient: ["#1E40AF", "#1E3A8A"],
+    lat: 46.02, lon: 7.75,
   },
   {
     id: "niseko",
@@ -314,6 +349,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [5, 6, 7, 8, 9],
     distanceTag: "long",
     cardGradient: ["#1E40AF", "#312E81"],
+    lat: 42.85, lon: 140.69,
   },
   {
     id: "aspen",
@@ -327,6 +363,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [5, 6, 7, 8, 9],
     distanceTag: "medium",
     cardGradient: ["#0F172A", "#334155"],
+    lat: 39.19, lon: -106.82,
   },
   {
     id: "banff",
@@ -340,6 +377,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [5, 6, 7, 8],
     distanceTag: "medium",
     cardGradient: ["#164E63", "#0E7490"],
+    lat: 51.18, lon: -115.57,
   },
   // CITY
   {
@@ -354,6 +392,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [7, 8],
     distanceTag: "long",
     cardGradient: ["#BE185D", "#831843"],
+    lat: 35.69, lon: 139.69,
   },
   {
     id: "new-york",
@@ -367,6 +406,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [1, 2],
     distanceTag: "medium",
     cardGradient: ["#1E3A8A", "#312E81"],
+    lat: 40.71, lon: -74.01,
   },
   {
     id: "singapore",
@@ -380,6 +420,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [],
     distanceTag: "long",
     cardGradient: ["#065F46", "#047857"],
+    lat: 1.35, lon: 103.82,
   },
   {
     id: "barcelona",
@@ -393,6 +434,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [12, 1],
     distanceTag: "medium",
     cardGradient: ["#DC2626", "#9F1239"],
+    lat: 41.39, lon: 2.17,
   },
   {
     id: "dubai",
@@ -406,6 +448,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8, 9],
     distanceTag: "medium",
     cardGradient: ["#B45309", "#92400E"],
+    lat: 25.20, lon: 55.27,
   },
   {
     id: "copenhagen",
@@ -419,6 +462,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [12, 1, 2],
     distanceTag: "medium",
     cardGradient: ["#1D4ED8", "#1E3A8A"],
+    lat: 55.68, lon: 12.57,
   },
   {
     id: "mexico-city",
@@ -432,6 +476,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [7, 8, 9],
     distanceTag: "medium",
     cardGradient: ["#7C3AED", "#6D28D9"],
+    lat: 19.43, lon: -99.13,
   },
   // NATURE
   {
@@ -446,6 +491,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [],
     distanceTag: "long",
     cardGradient: ["#065F46", "#064E3B"],
+    lat: -0.95, lon: -90.96,
   },
   {
     id: "fjords",
@@ -459,6 +505,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [11, 12, 1, 2],
     distanceTag: "medium",
     cardGradient: ["#0E7490", "#0F172A"],
+    lat: 60.47, lon: 6.55,
   },
   {
     id: "bhutan",
@@ -472,6 +519,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8],
     distanceTag: "long",
     cardGradient: ["#B45309", "#78350F"],
+    lat: 27.51, lon: 90.43,
   },
   {
     id: "svalbard",
@@ -485,6 +533,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [],
     distanceTag: "medium",
     cardGradient: ["#1E293B", "#0F172A"],
+    lat: 77.55, lon: 23.67,
   },
   {
     id: "serengeti",
@@ -498,6 +547,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [3, 4, 5],
     distanceTag: "long",
     cardGradient: ["#B45309", "#92400E"],
+    lat: -2.33, lon: 34.83,
   },
   {
     id: "faroe-islands",
@@ -511,6 +561,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [12, 1, 2],
     distanceTag: "medium",
     cardGradient: ["#164E63", "#0E7490"],
+    lat: 61.89, lon: -6.91,
   },
   // FOOD
   {
@@ -525,6 +576,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [12, 1],
     distanceTag: "medium",
     cardGradient: ["#DC2626", "#9F1239"],
+    lat: 43.32, lon: -1.98,
   },
   {
     id: "oaxaca",
@@ -538,6 +590,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [6, 7, 8, 9],
     distanceTag: "medium",
     cardGradient: ["#7C3AED", "#6D28D9"],
+    lat: 17.07, lon: -96.72,
   },
   {
     id: "vietnam-hoi-an",
@@ -551,6 +604,7 @@ export const DESTINATIONS: Destination[] = [
     badMonths: [10, 11],
     distanceTag: "long",
     cardGradient: ["#D97706", "#92400E"],
+    lat: 15.88, lon: 108.34,
   },
 ];
 
@@ -558,28 +612,44 @@ export type InspirePreferences = {
   styles: TravelStyle[];
   month: number;
   distance: DistancePref;
+  startCoords?: [number, number] | null;
 };
+
+// Distance band thresholds (km) to match short/medium/long haul flight times
+const SHORT_MAX_KM = 2000;
+const MEDIUM_MAX_KM = 5000;
 
 export function getRecommendations(
   prefs: InspirePreferences,
   visitedCountries: string[]
 ): Destination[] {
-  const { styles, month, distance } = prefs;
+  const { styles, month, distance, startCoords } = prefs;
 
   let pool = [...DESTINATIONS];
 
   // Avoid bad-weather months
   pool = pool.filter((d) => !d.badMonths.includes(month));
 
-  // Filter by distance preference
+  // Filter by distance — use actual haversine km when start coords provided,
+  // otherwise fall back to the preassigned distanceTag
   if (distance !== "any") {
-    pool = pool.filter((d) =>
-      distance === "short"
-        ? d.distanceTag === "short"
-        : distance === "medium"
-        ? d.distanceTag === "short" || d.distanceTag === "medium"
-        : true
-    );
+    if (startCoords) {
+      const [sLat, sLon] = startCoords;
+      pool = pool.filter((d) => {
+        const km = haversineKm(sLat, sLon, d.lat, d.lon);
+        if (distance === "short") return km <= SHORT_MAX_KM;
+        if (distance === "medium") return km <= MEDIUM_MAX_KM;
+        return true; // long = anything goes
+      });
+    } else {
+      pool = pool.filter((d) =>
+        distance === "short"
+          ? d.distanceTag === "short"
+          : distance === "medium"
+          ? d.distanceTag === "short" || d.distanceTag === "medium"
+          : true
+      );
+    }
   }
 
   // Score by style match

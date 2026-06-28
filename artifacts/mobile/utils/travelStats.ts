@@ -11,7 +11,7 @@ export function buildMonthMap(photos: PhotoAsset[]): Map<string, number> {
   const m = new Map<string, Set<string>>();
   for (const p of photos) {
     if (!p.country) continue;
-    const d = new Date(p.modificationTime);
+    const d = new Date(p.creationTime);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!m.has(key)) m.set(key, new Set());
     m.get(key)!.add(p.country);
