@@ -1,0 +1,1 @@
+- [iOS WKWebView canvas emoji clipping](ios-webview-emoji-clip.md) — emoji inside ctx.clip() get top-clipped on real device; draw emoji after ctx.restore() instead.

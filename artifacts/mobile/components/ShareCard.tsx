@@ -246,23 +246,14 @@ function drawCard(land){
   var iMgn=Math.round(20*SC);   // margin from box edges (keep emoji clearly inside)
 
   function drawStatBox(bx,by,bg,value,label,icon){
-    // Clip everything to the rounded rect — nothing can escape the box
+    // Clip background + text only — emoji drawn separately after restore
+    // (iOS WKWebView clips emoji inside canvas clip regions incorrectly)
     ctx.save();
     rr(bx,by,bW,bH,bR);
     ctx.clip();
-
-    // Card background (reuse the current path)
     ctx.fillStyle=bg;ctx.fill();
 
-    // Icon — top-right corner, larger + higher opacity for clarity
-    ctx.save();
-    ctx.globalAlpha=0.55;
-    ctx.font=iFs+'px serif';ctx.textAlign='right';
-    // by+iMgn+iFs*0.82 = baseline; top of glyph lands at by+iMgn (well inside box)
-    ctx.fillText(icon, bx+bW-iMgn, by+iMgn+Math.round(iFs*0.82));
-    ctx.restore();
-
-    // Value — bottom of card (justifyContent flex-end), bold white
+    // Value — bottom of card
     var vBase=by+bH-bP;
     var lLh=Math.round(lFs*1.3);
     var gap=Math.round(2*SC);
@@ -277,12 +268,21 @@ function drawCard(land){
     ctx.textAlign='left';
     ctx.fillText(vStr, bx+bP, vBase2);
 
-    // Label — small, muted white
+    // Label
     ctx.fillStyle='rgba(255,255,255,0.65)';
     ctx.font='400 '+lFs+'px -apple-system,system-ui,Arial,sans-serif';
     ctx.fillText(label, bx+bP, vBase);
 
-    ctx.restore(); // restores clip
+    ctx.restore(); // end clip region
+
+    // Emoji drawn OUTSIDE clip to avoid iOS WKWebView glyph-clipping bug.
+    // Emoji ascent on iOS can exceed the nominal font size, causing the top
+    // of the glyph to be cut off when inside a canvas clip path.
+    ctx.save();
+    ctx.globalAlpha=0.55;
+    ctx.font=iFs+'px serif';ctx.textAlign='right';
+    ctx.fillText(icon, bx+bW-iMgn, by+iMgn+Math.round(iFs*0.88));
+    ctx.restore();
   }
 
   var cStr=String(D.countries);
