@@ -66,46 +66,17 @@ var cv=document.getElementById('c'),ctx=cv.getContext('2d');
 function send(m){try{window.ReactNativeWebView.postMessage(m);}catch(e){try{window.parent.postMessage(m,'*');}catch(e2){}}}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 
-// Top-down airplane silhouette (nose points toward -y when rot=0)
+// Standard ✈️ plane emoji rotated to match flight-path heading.
+// ✈️ naturally points right (+x); original bigPlane had nose pointing up (-y) at rot=0.
+// So offset rotation by -π/2 to convert, then add the path heading (0.765 rad).
 function bigPlane(x,y,rot,sz){
-  ctx.save();ctx.translate(x,y);ctx.rotate(rot);
-  ctx.fillStyle='rgba(228,175,52,0.97)';
-  // Fuselage — slender pointed body
-  ctx.beginPath();
-  ctx.moveTo(0,-sz*0.88);
-  ctx.bezierCurveTo(sz*0.09,-sz*0.72,sz*0.11,-sz*0.10,sz*0.09,sz*0.52);
-  ctx.lineTo(0,sz*0.76);
-  ctx.lineTo(-sz*0.09,sz*0.52);
-  ctx.bezierCurveTo(-sz*0.11,-sz*0.10,-sz*0.09,-sz*0.72,0,-sz*0.88);
-  ctx.closePath();ctx.fill();
-  // Right swept wing
-  ctx.beginPath();
-  ctx.moveTo(sz*0.09,-sz*0.06);
-  ctx.lineTo(sz*0.92,sz*0.38);
-  ctx.lineTo(sz*0.80,sz*0.60);
-  ctx.lineTo(sz*0.09,sz*0.28);
-  ctx.closePath();ctx.fill();
-  // Left swept wing
-  ctx.beginPath();
-  ctx.moveTo(-sz*0.09,-sz*0.06);
-  ctx.lineTo(-sz*0.92,sz*0.38);
-  ctx.lineTo(-sz*0.80,sz*0.60);
-  ctx.lineTo(-sz*0.09,sz*0.28);
-  ctx.closePath();ctx.fill();
-  // Right horizontal stabilizer
-  ctx.beginPath();
-  ctx.moveTo(sz*0.09,sz*0.55);
-  ctx.lineTo(sz*0.42,sz*0.70);
-  ctx.lineTo(sz*0.38,sz*0.78);
-  ctx.lineTo(sz*0.09,sz*0.65);
-  ctx.closePath();ctx.fill();
-  // Left horizontal stabilizer
-  ctx.beginPath();
-  ctx.moveTo(-sz*0.09,sz*0.55);
-  ctx.lineTo(-sz*0.42,sz*0.70);
-  ctx.lineTo(-sz*0.38,sz*0.78);
-  ctx.lineTo(-sz*0.09,sz*0.65);
-  ctx.closePath();ctx.fill();
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(-Math.PI/2+rot);
+  ctx.font=Math.round(sz*2.2)+'px serif';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('\u2708\uFE0F',0,0);
   ctx.restore();
 }
 
