@@ -121,16 +121,17 @@ function PhotoStrip({ uris, onPress }: { uris: string[]; onPress: (i: number) =>
   );
 }
 
-// ─── Home City Card ───────────────────────────────────────────────────────────
+// ─── Home Country Card ────────────────────────────────────────────────────────
 
-function HomeCityCard({
-  cityVisit,
+function HomeCountryCard({
+  countryVisit,
   onPhotoPress,
 }: {
-  cityVisit: CityVisit;
+  countryVisit: CountryVisit;
   onPhotoPress: (uris: string[], index: number) => void;
 }) {
   const colors = useColors();
+  const allUris = countryVisit.cities.flatMap((ci) => ci.photoUris ?? []);
   return (
     <View style={[styles.homeCityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.homeCityCardHeader}>
@@ -140,16 +141,16 @@ function HomeCityCard({
         </View>
         <View style={styles.homeCityMeta}>
           <Text style={[styles.homeCityCardName, { color: colors.foreground }]}>
-            {countryToFlag(cityVisit.country)} {cityVisit.city}
+            {countryToFlag(countryVisit.country)} {countryVisit.country}
           </Text>
           <Text style={[styles.homeCityCardCountry, { color: colors.mutedForeground }]}>
-            {cityVisit.country} · {cityVisit.photoCount} photos
+            {countryVisit.cities.length} {countryVisit.cities.length === 1 ? "city" : "cities"} · {countryVisit.photoCount} photos
           </Text>
         </View>
       </View>
       <PhotoStrip
-        uris={cityVisit.photoUris ?? []}
-        onPress={(idx) => onPhotoPress(cityVisit.photoUris ?? [], idx)}
+        uris={allUris}
+        onPress={(idx) => onPhotoPress(allUris, idx)}
       />
       <Text style={[styles.homeCityNote, { color: colors.mutedForeground }]}>
         Not counted in trip stats
@@ -229,27 +230,19 @@ export default function ListTab() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
 
-  const homeCityVisit = useMemo(() => {
+  const homeCountryVisit = useMemo(() => {
     if (!homeCity) return null;
-    const country = countries.find((c) => c.country === homeCity.country);
-    return country?.cities.find((ci) => ci.city === homeCity.city) ?? null;
+    return countries.find((c) => c.country === homeCity.country) ?? null;
   }, [countries, homeCity]);
 
   const tripCountries = useMemo(() => {
     if (!homeCity) return countries;
-    return countries
-      .map((c) => {
-        if (c.country !== homeCity.country) return c;
-        const filteredCities = c.cities.filter((ci) => ci.city !== homeCity.city);
-        if (filteredCities.length === 0) return null;
-        return { ...c, cities: filteredCities, photoCount: filteredCities.reduce((a, ci) => a + ci.photoCount, 0) } as CountryVisit;
-      })
-      .filter((c): c is CountryVisit => c !== null);
+    return countries.filter((c) => c.country !== homeCity.country);
   }, [countries, homeCity]);
 
   const tripPhotos = useMemo(() => {
     if (!homeCity) return photos;
-    return photos.filter((p) => !(p.city === homeCity.city && p.country === homeCity.country));
+    return photos.filter((p) => p.country !== homeCity.country);
   }, [photos, homeCity]);
 
   // Flatten all cities and sort chronologically (newest first)
@@ -326,9 +319,9 @@ export default function ListTab() {
           <View style={{ paddingBottom: 4 }}>
             <TripSummaryBar countries={tripCountries} photos={tripPhotos} />
 
-            {homeCityVisit && (
+            {homeCountryVisit && (
               <View style={styles.homeCitySection}>
-                <HomeCityCard cityVisit={homeCityVisit} onPhotoPress={openViewer} />
+                <HomeCountryCard countryVisit={homeCountryVisit} onPhotoPress={openViewer} />
               </View>
             )}
 

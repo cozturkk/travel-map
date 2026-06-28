@@ -9,7 +9,6 @@ import React, {
 
 export interface HomeCity {
   country: string;
-  city: string;
 }
 
 interface HomeCityContextType {
@@ -18,7 +17,7 @@ interface HomeCityContextType {
 }
 
 const HomeCityContext = createContext<HomeCityContextType | null>(null);
-const HOME_CITY_KEY = "home_city_v1";
+const HOME_CITY_KEY = "home_country_v1";
 
 export function HomeCityProvider({ children }: { children: React.ReactNode }) {
   const [homeCity, setHomeCityState] = useState<HomeCity | null>(null);
