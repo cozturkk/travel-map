@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -44,9 +45,9 @@ const STYLE_OPTIONS: { id: TravelStyle; label: string; icon: string }[] = [
 ];
 
 const DISTANCE_OPTIONS: { id: DistancePref; label: string; sublabel: string }[] = [
-  { id: "short", label: "Short haul", sublabel: "< 2,000 km" },
-  { id: "medium", label: "Medium haul", sublabel: "2,000–5,000 km" },
-  { id: "long", label: "Long haul", sublabel: "5,000+ km" },
+  { id: "short", label: "Short haul", sublabel: "1–2 hr flight" },
+  { id: "medium", label: "Medium haul", sublabel: "3–4 hr flight" },
+  { id: "long", label: "Long haul", sublabel: "4+ hr flight" },
   { id: "any", label: "Any", sublabel: "Surprise me" },
 ];
 
@@ -231,7 +232,7 @@ function DestinationCard({
             <Text style={styles.metaTagText}>
               {fromKm != null
                 ? fmtDistance(fromKm)
-                : dest.distanceTag === "short" ? "< 2,000 km" : dest.distanceTag === "medium" ? "2–5,000 km" : "5,000+ km"}
+                : dest.distanceTag === "short" ? "1–2 hr flight" : dest.distanceTag === "medium" ? "3–4 hr flight" : "4+ hr flight"}
             </Text>
           </View>
         </View>
@@ -250,6 +251,7 @@ export default function InspireTab() {
   const [selectedDistance, setSelectedDistance] = useState<DistancePref>("any");
   const [selectedCityIdx, setSelectedCityIdx] = useState<number | null>(null);
   const [cityPickerVisible, setCityPickerVisible] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [results, setResults] = useState<Destination[] | null>(null);
   const [resultDistances, setResultDistances] = useState<(number | undefined)[]>([]);
   const [loading, setLoading] = useState(false);
@@ -556,43 +558,74 @@ export default function InspireTab() {
         animationType="slide"
         onRequestClose={() => setCityPickerVisible(false)}
       >
-        <Pressable style={styles.cityModalOverlay} onPress={() => setCityPickerVisible(false)}>
+        <Pressable style={styles.cityModalOverlay} onPress={() => { setCityPickerVisible(false); setCitySearch(""); }}>
           <Pressable
             style={[styles.cityModalSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}
             onPress={() => {}}
           >
             <View style={[styles.cityModalHandle, { backgroundColor: colors.border }]} />
             <Text style={[styles.cityModalTitle, { color: colors.foreground }]}>Flying from</Text>
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.cityModalList}>
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedCityIdx(null);
-                  setCityPickerVisible(false);
-                }}
-                style={[styles.cityModalRow, { borderBottomColor: colors.border }]}
-              >
-                <Text style={[styles.cityModalRowText, { color: selectedCityIdx === null ? colors.primary : colors.foreground }]}>
-                  Anywhere
-                </Text>
-                {selectedCityIdx === null && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-              </TouchableOpacity>
-              {DEPARTURE_CITIES.map((city, idx) => (
+            <View style={[styles.citySearchWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Ionicons name="search" size={18} color={colors.mutedForeground} />
+              <TextInput
+                value={citySearch}
+                onChangeText={setCitySearch}
+                placeholder="Search city…"
+                placeholderTextColor={colors.mutedForeground}
+                autoCorrect={false}
+                style={[styles.citySearchInput, { color: colors.foreground }]}
+              />
+              {citySearch.length > 0 && (
+                <TouchableOpacity onPress={() => setCitySearch("")} hitSlop={10}>
+                  <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.cityModalList} keyboardShouldPersistTaps="handled">
+              {citySearch.trim().length === 0 && (
                 <TouchableOpacity
-                  key={city.name}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSelectedCityIdx(idx);
+                    setSelectedCityIdx(null);
+                    setCitySearch("");
                     setCityPickerVisible(false);
                   }}
                   style={[styles.cityModalRow, { borderBottomColor: colors.border }]}
                 >
-                  <Text style={[styles.cityModalRowText, { color: selectedCityIdx === idx ? colors.primary : colors.foreground }]}>
-                    {city.name}
+                  <Text style={[styles.cityModalRowText, { color: selectedCityIdx === null ? colors.primary : colors.foreground }]}>
+                    Anywhere
                   </Text>
-                  {selectedCityIdx === idx && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                  {selectedCityIdx === null && <Ionicons name="checkmark" size={18} color={colors.primary} />}
                 </TouchableOpacity>
-              ))}
+              )}
+              {DEPARTURE_CITIES.map((city, idx) => ({ city, idx }))
+                .filter(({ city }) =>
+                  city.name.toLowerCase().includes(citySearch.trim().toLowerCase())
+                )
+                .map(({ city, idx }) => (
+                  <TouchableOpacity
+                    key={city.name}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSelectedCityIdx(idx);
+                      setCitySearch("");
+                      setCityPickerVisible(false);
+                    }}
+                    style={[styles.cityModalRow, { borderBottomColor: colors.border }]}
+                  >
+                    <Text style={[styles.cityModalRowText, { color: selectedCityIdx === idx ? colors.primary : colors.foreground }]}>
+                      {city.name}
+                    </Text>
+                    {selectedCityIdx === idx && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                  </TouchableOpacity>
+                ))}
+              {DEPARTURE_CITIES.filter((c) =>
+                c.name.toLowerCase().includes(citySearch.trim().toLowerCase())
+              ).length === 0 && (
+                <Text style={[styles.cityModalEmpty, { color: colors.mutedForeground }]}>
+                  No cities match "{citySearch.trim()}"
+                </Text>
+              )}
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -707,6 +740,30 @@ const styles = StyleSheet.create({
   },
   cityModalList: {
     flexGrow: 0,
+    maxHeight: 420,
+  },
+  citySearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  citySearchInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    padding: 0,
+  },
+  cityModalEmpty: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    paddingVertical: 28,
   },
   cityModalRow: {
     flexDirection: "row",

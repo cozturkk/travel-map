@@ -616,8 +616,8 @@ export type InspirePreferences = {
 };
 
 // Distance band thresholds (km) to match short/medium/long haul flight times
-const SHORT_MAX_KM = 2000;
-const MEDIUM_MAX_KM = 5000;
+const SHORT_MAX_KM = 1600;   // ~1–2 hr flight
+const MEDIUM_MAX_KM = 3500;  // ~3–4 hr flight (long = 4+ hr)
 
 export function getRecommendations(
   prefs: InspirePreferences,
@@ -637,9 +637,9 @@ export function getRecommendations(
       const [sLat, sLon] = startCoords;
       pool = pool.filter((d) => {
         const km = haversineKm(sLat, sLon, d.lat, d.lon);
-        if (distance === "short") return km <= SHORT_MAX_KM;
-        if (distance === "medium") return km <= MEDIUM_MAX_KM;
-        return true; // long = anything goes
+        if (distance === "short") return km <= SHORT_MAX_KM;            // 1–2 hr
+        if (distance === "medium") return km > SHORT_MAX_KM && km <= MEDIUM_MAX_KM; // 3–4 hr
+        return km > SHORT_MAX_KM;                                       // long = 4+ hr
       });
     } else {
       pool = pool.filter((d) =>

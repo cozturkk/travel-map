@@ -69,7 +69,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v8";
+const CACHE_KEY = "travel_data_v9";
 
 // Lookup: well-known sub-city localities → parent city name.
 // Covers London boroughs, NYC boroughs, Tokyo special wards, Paris arrondissements.
@@ -137,6 +137,36 @@ function resolveCity(
 }
 const MAX_PHOTOS = 2000;
 const BATCH_SIZE = 20;
+
+// Parse the TRUE capture time of a photo.
+// iOS MediaLibrary `creationTime` is often the date the asset was *added* to the
+// library (e.g. saved from Messages, AirDrop, WhatsApp) — not when the shot was
+// taken. The EXIF `DateTimeOriginal` tag is the camera's recorded capture time
+// and is the source of truth. Fall back to creationTime when EXIF is missing.
+function exifToTs(v: unknown): number {
+  if (typeof v !== "string") return NaN;
+  // EXIF format: "YYYY:MM:DD HH:MM:SS" (sometimes with a "T" separator)
+  const m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(v.trim());
+  if (!m) return NaN;
+  const [, Y, Mo, D, H, Mi, S] = m;
+  return new Date(+Y, +Mo - 1, +D, +H, +Mi, +S).getTime();
+}
+
+function captureTime(info: any): number {
+  const ex = info?.exif ?? {};
+  const nested = ex["{Exif}"] ?? {};
+  const candidate =
+    ex.DateTimeOriginal ??
+    ex.DateTimeDigitized ??
+    nested.DateTimeOriginal ??
+    nested.DateTimeDigitized;
+  const t = exifToTs(candidate);
+  if (isFinite(t) && t > 0) return t;
+  // Fallbacks: creationTime, then modificationTime
+  if (typeof info?.creationTime === "number" && info.creationTime > 0) return info.creationTime;
+  if (typeof info?.modificationTime === "number" && info.modificationTime > 0) return info.modificationTime;
+  return Date.now();
+}
 
 function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
   const countryMap = new Map<string, Map<string, PhotoAsset[]>>();
@@ -296,7 +326,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
               uri: displayUri,
               latitude: lat,
               longitude: lon,
-              creationTime: info.creationTime,
+              creationTime: captureTime(info),
             });
           }
         }

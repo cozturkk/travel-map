@@ -309,23 +309,33 @@ export default function MapTab() {
     const visitedContinents = new Set(
       allVisited.map((c) => CONTINENT_MAP[c]).filter(Boolean)
     );
+    // Total distinct cities across every visited country
+    const allCities = countries.flatMap((cv) => cv.cities);
+    const cities = allCities.length;
+    // This-year counts
     const countriesThisYear = countries.filter(
       (cv) => cv.lastDate >= startOfYear
     ).length;
-    const yearCounts: Record<number, number> = {};
+    const citiesThisYear = allCities.filter(
+      (ci) => ci.lastDate >= startOfYear
+    ).length;
+    // Earliest year we have a (capture-dated) photo for
+    let earliest = Infinity;
     for (const p of photos) {
-      const yr = new Date(p.creationTime).getFullYear();
-      yearCounts[yr] = (yearCounts[yr] ?? 0) + 1;
+      if (typeof p.creationTime === "number" && p.creationTime < earliest) {
+        earliest = p.creationTime;
+      }
     }
-    const busiestYear =
-      Object.keys(yearCounts).length > 0
-        ? Number(Object.entries(yearCounts).sort((a, b) => b[1] - a[1])[0][0])
-        : currentYear;
+    const travelingSince = isFinite(earliest)
+      ? new Date(earliest).getFullYear()
+      : 0;
     return {
       countries: allVisited.length,
+      cities,
       continents: visitedContinents.size,
       countriesThisYear,
-      busiestYear,
+      citiesThisYear,
+      travelingSince,
     };
   }, [allVisited, countries, photos]);
 
