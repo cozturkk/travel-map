@@ -66,17 +66,40 @@ var cv=document.getElementById('c'),ctx=cv.getContext('2d');
 function send(m){try{window.ReactNativeWebView.postMessage(m);}catch(e){try{window.parent.postMessage(m,'*');}catch(e2){}}}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 
-// Standard ✈️ plane emoji rotated to match flight-path heading.
-// ✈️ naturally points right (+x); original bigPlane had nose pointing up (-y) at rot=0.
-// So offset rotation by -π/2 to convert, then add the path heading (0.765 rad).
+// Solid white icon-style airplane silhouette.
+// Nose points toward -y at rot=0. User requested +45° (π/4) clockwise offset.
+// sz scaled down to 1.3× for a cleaner icon look at this size.
 function bigPlane(x,y,rot,sz){
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(-Math.PI/2+rot);
-  ctx.font=Math.round(sz*2.2)+'px serif';
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
-  ctx.fillText('\u2708\uFE0F',0,0);
+  var s=sz*1.3;
+  ctx.save();ctx.translate(x,y);ctx.rotate(rot+Math.PI/4);
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  // Fuselage
+  ctx.beginPath();
+  ctx.moveTo(0,-s*0.75);
+  ctx.bezierCurveTo(s*0.08,-s*0.60,s*0.09,-s*0.08,s*0.08,s*0.45);
+  ctx.lineTo(0,s*0.68);ctx.lineTo(-s*0.08,s*0.45);
+  ctx.bezierCurveTo(-s*0.09,-s*0.08,-s*0.08,-s*0.60,0,-s*0.75);
+  ctx.closePath();ctx.fill();
+  // Right wing
+  ctx.beginPath();
+  ctx.moveTo(s*0.08,-s*0.03);ctx.lineTo(s*0.80,s*0.30);
+  ctx.lineTo(s*0.68,s*0.48);ctx.lineTo(s*0.08,s*0.22);
+  ctx.closePath();ctx.fill();
+  // Left wing
+  ctx.beginPath();
+  ctx.moveTo(-s*0.08,-s*0.03);ctx.lineTo(-s*0.80,s*0.30);
+  ctx.lineTo(-s*0.68,s*0.48);ctx.lineTo(-s*0.08,s*0.22);
+  ctx.closePath();ctx.fill();
+  // Right stabiliser
+  ctx.beginPath();
+  ctx.moveTo(s*0.07,s*0.48);ctx.lineTo(s*0.34,s*0.62);
+  ctx.lineTo(s*0.30,s*0.70);ctx.lineTo(s*0.07,s*0.58);
+  ctx.closePath();ctx.fill();
+  // Left stabiliser
+  ctx.beginPath();
+  ctx.moveTo(-s*0.07,s*0.48);ctx.lineTo(-s*0.34,s*0.62);
+  ctx.lineTo(-s*0.30,s*0.70);ctx.lineTo(-s*0.07,s*0.58);
+  ctx.closePath();ctx.fill();
   ctx.restore();
 }
 
@@ -213,12 +236,8 @@ function drawCard(land){
   var bP=Math.round(18*SC);     // padding
   var vFs=Math.round(44*SC);    // value fontSize
   var lFs=Math.round(14*SC);    // label fontSize
-  var iFs=Math.round(52*SC);    // icon fontSize (matches app's 52px)
-  var iMgn=Math.round(20*SC);   // margin from box edges (keep emoji clearly inside)
 
-  function drawStatBox(bx,by,bg,value,label,icon){
-    // Clip background + text only — emoji drawn separately after restore
-    // (iOS WKWebView clips emoji inside canvas clip regions incorrectly)
+  function drawStatBox(bx,by,bg,value,label){
     ctx.save();
     rr(bx,by,bW,bH,bR);
     ctx.clip();
@@ -239,20 +258,11 @@ function drawCard(land){
     ctx.textAlign='left';
     ctx.fillText(vStr, bx+bP, vBase2);
 
-    // Label
+    // Label — emoji inline as text at the same size
     ctx.fillStyle='rgba(255,255,255,0.65)';
-    ctx.font='400 '+lFs+'px -apple-system,system-ui,Arial,sans-serif';
+    ctx.font='400 '+lFs+'px serif';
     ctx.fillText(label, bx+bP, vBase);
 
-    ctx.restore(); // end clip region
-
-    // Emoji drawn OUTSIDE clip to avoid iOS WKWebView glyph-clipping bug.
-    // Emoji ascent on iOS can exceed the nominal font size, causing the top
-    // of the glyph to be cut off when inside a canvas clip path.
-    ctx.save();
-    ctx.globalAlpha=0.55;
-    ctx.font=iFs+'px serif';ctx.textAlign='right';
-    ctx.fillText(icon, bx+bW-iMgn, by+iMgn+Math.round(iFs*0.88));
     ctx.restore();
   }
 
@@ -260,8 +270,8 @@ function drawCard(land){
   var pct=Math.max(1,Math.round(D.countries/195*100));
   var pStr=pct+'%';
 
-  drawStatBox(60,       bY, '#1B3A6A', cStr, 'countries visited', '⛰️');
-  drawStatBox(60+bW+bGap, bY, '#7C2D12', pStr, 'of the world',       '🌍');
+  drawStatBox(60,         bY, '#1B3A6A', cStr, 'countries visited \u26F0\uFE0F');
+  drawStatBox(60+bW+bGap, bY, '#7C2D12', pStr, 'of the world \uD83C\uDF0E');
 
   // ── FLAGS COLLECTED ──────────────────────────────────────────────────────────
   var flY=bY+bH+80;
