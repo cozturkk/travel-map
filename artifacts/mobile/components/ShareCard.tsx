@@ -63,27 +63,51 @@ var cv=document.getElementById('c'),ctx=cv.getContext('2d');
 function send(m){try{window.ReactNativeWebView.postMessage(m);}catch(e){try{window.parent.postMessage(m,'*');}catch(e2){}}}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 
-// Cloud puff
-function cloud(cx,cy,sz){
-  var pts=[[0,-0.05,1],[0.50,0.14,0.72],[-0.50,0.14,0.72],[0.90,0.34,0.55],[-0.90,0.34,0.55]];
-  pts.forEach(function(p){ctx.beginPath();ctx.arc(cx+sz*p[0],cy+sz*p[1],sz*p[2],0,Math.PI*2);ctx.fill();});
-}
-
-// Top-down airplane silhouette
+// Perspective side-view airplane silhouette (nose points toward -y when rot=0)
 function bigPlane(x,y,rot,sz){
   ctx.save();ctx.translate(x,y);ctx.rotate(rot);
   ctx.fillStyle='rgba(228,175,52,0.97)';
-  ctx.beginPath();ctx.ellipse(0,0,sz*0.115,sz,0,0,Math.PI*2);ctx.fill();
+  // Fuselage — elongated capsule
   ctx.beginPath();
-  ctx.moveTo(-sz*0.06,sz*0.08);ctx.lineTo(-sz*0.82,sz*0.28);ctx.lineTo(-sz*0.78,sz*0.42);
-  ctx.lineTo(-sz*0.06,sz*0.36);ctx.lineTo(sz*0.06,sz*0.36);ctx.lineTo(sz*0.78,sz*0.42);
-  ctx.lineTo(sz*0.82,sz*0.28);ctx.lineTo(sz*0.06,sz*0.08);ctx.closePath();ctx.fill();
+  ctx.moveTo(0,-sz);
+  ctx.bezierCurveTo(sz*0.11,-sz*0.88,sz*0.13,-sz*0.55,sz*0.13,sz*0.28);
+  ctx.bezierCurveTo(sz*0.11,sz*0.72,sz*0.06,sz*0.94,0,sz);
+  ctx.bezierCurveTo(-sz*0.06,sz*0.94,-sz*0.11,sz*0.72,-sz*0.13,sz*0.28);
+  ctx.bezierCurveTo(-sz*0.13,-sz*0.55,-sz*0.11,-sz*0.88,0,-sz);
+  ctx.closePath();ctx.fill();
+  // Left main wing (far side — larger)
   ctx.beginPath();
-  ctx.moveTo(-sz*0.06,sz*0.72);ctx.lineTo(-sz*0.38,sz*0.82);ctx.lineTo(-sz*0.36,sz*0.94);
-  ctx.lineTo(-sz*0.06,sz*0.90);ctx.lineTo(sz*0.06,sz*0.90);ctx.lineTo(sz*0.36,sz*0.94);
-  ctx.lineTo(sz*0.38,sz*0.82);ctx.lineTo(sz*0.06,sz*0.72);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.ellipse(-sz*0.40,sz*0.26,sz*0.07,sz*0.14,0,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(sz*0.40,sz*0.26,sz*0.07,sz*0.14,0,0,Math.PI*2);ctx.fill();
+  ctx.moveTo(-sz*0.13,sz*0.06);ctx.lineTo(-sz*0.96,sz*0.34);
+  ctx.lineTo(-sz*0.88,sz*0.54);ctx.lineTo(-sz*0.13,sz*0.32);
+  ctx.closePath();ctx.fill();
+  // Right main wing (near side — slightly smaller)
+  ctx.beginPath();
+  ctx.moveTo(sz*0.13,sz*0.06);ctx.lineTo(sz*0.82,sz*0.32);
+  ctx.lineTo(sz*0.74,sz*0.50);ctx.lineTo(sz*0.13,sz*0.30);
+  ctx.closePath();ctx.fill();
+  // Left engine pod
+  ctx.save();ctx.translate(-sz*0.60,sz*0.32);ctx.rotate(0.26);
+  ctx.beginPath();ctx.ellipse(0,0,sz*0.072,sz*0.21,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // Right engine pod
+  ctx.save();ctx.translate(sz*0.50,sz*0.30);ctx.rotate(0.26);
+  ctx.beginPath();ctx.ellipse(0,0,sz*0.060,sz*0.18,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // Vertical tail fin
+  ctx.beginPath();
+  ctx.moveTo(-sz*0.03,sz*0.46);ctx.lineTo(-sz*0.07,sz*0.18);
+  ctx.lineTo(sz*0.06,sz*0.25);ctx.lineTo(sz*0.05,sz*0.54);
+  ctx.closePath();ctx.fill();
+  // Left horizontal stabilizer
+  ctx.beginPath();
+  ctx.moveTo(-sz*0.13,sz*0.72);ctx.lineTo(-sz*0.46,sz*0.84);
+  ctx.lineTo(-sz*0.43,sz*0.94);ctx.lineTo(-sz*0.13,sz*0.84);
+  ctx.closePath();ctx.fill();
+  // Right horizontal stabilizer
+  ctx.beginPath();
+  ctx.moveTo(sz*0.13,sz*0.70);ctx.lineTo(sz*0.38,sz*0.81);
+  ctx.lineTo(sz*0.36,sz*0.90);ctx.lineTo(sz*0.13,sz*0.80);
+  ctx.closePath();ctx.fill();
   ctx.restore();
 }
 
@@ -143,29 +167,30 @@ function drawCard(land){
     drawFallbackContinents();
   }
 
-  // Clouds at globe edges
-  ctx.fillStyle='rgba(192,214,255,0.78)';
-  cloud(GX-GR*0.60,GY-GR*0.54,36);
-  cloud(GX-GR*0.70,GY+GR*0.38,30);
-  cloud(GX+GR*0.54,GY-GR*0.52,30);
-  cloud(GX+GR*0.60,GY+GR*0.36,26);
-
-  // Dashed flight paths
+  // ── Dashed flight paths ─────────────────────────────────────────────────────
+  // Path 1 is computed so its t≈0.45 point lands exactly on the plane.
+  // Plane position: (GX+0.06*GR, GY-0.35*GR)
+  // Control point solved analytically so the bezier passes through plane at t=0.45:
+  //   Cx = (planeX - 0.3025*P0x - 0.2025*P2x) / 0.495  ≈ GX+0.37*GR
+  //   Cy = (planeY - 0.3025*P0y - 0.2025*P2y) / 0.495  ≈ GY-0.77*GR
+  // Travel direction at t=0.45 → plane rotation ≈ +0.765 rad (nose upper-right)
   ctx.save();
   ctx.setLineDash([13,17]);ctx.lineWidth=4.2;
-  ctx.strokeStyle='rgba(218,108,18,0.82)';ctx.lineCap='round';
+  ctx.strokeStyle='rgba(218,108,18,0.84)';ctx.lineCap='round';
+  // Main path (trail extends both ahead of nose and behind tail)
   ctx.beginPath();
-  ctx.moveTo(GX-GR*0.80,GY+GR*0.56);
-  ctx.quadraticCurveTo(GX-GR*0.08,GY-GR*0.56,GX+GR*0.88,GY+GR*0.08);
+  ctx.moveTo(GX-GR*0.78,GY+GR*0.60);
+  ctx.quadraticCurveTo(GX+GR*0.37,GY-GR*0.77, GX+GR*0.55,GY-GR*0.75);
   ctx.stroke();
+  // Second crossing arc
   ctx.beginPath();
-  ctx.moveTo(GX+GR*0.12,GY-GR*0.74);
-  ctx.quadraticCurveTo(GX+GR*0.90,GY-GR*0.18,GX+GR*0.74,GY+GR*0.64);
+  ctx.moveTo(GX-GR*0.40,GY-GR*0.80);
+  ctx.quadraticCurveTo(GX-GR*0.82,GY+GR*0.22, GX+GR*0.18,GY+GR*0.82);
   ctx.stroke();
   ctx.restore();
 
-  // Large airplane
-  bigPlane(GX+GR*0.06,GY-GR*0.40,-0.68,90);
+  // Plane sits at t≈0.45 on path 1, nose pointing upper-right (rot≈+0.765 rad)
+  bigPlane(GX+GR*0.06,GY-GR*0.35, 0.765, 82);
 
   ctx.restore(); // end globe clip
 
@@ -209,17 +234,24 @@ function drawCard(land){
   var bP=Math.round(18*SC);     // padding
   var vFs=Math.round(44*SC);    // value fontSize
   var lFs=Math.round(14*SC);    // label fontSize
-  var iFs=Math.round(52*SC);    // icon fontSize
-  var iOff=Math.round(10*SC);   // icon offset from edges
+  // Icon: larger than app (72px instead of 52) so it reads clearly on the share card
+  var iFs=Math.round(72*SC);    // icon fontSize
+  var iMgn=Math.round(14*SC);   // margin from box edges (keep emoji inside)
 
   function drawStatBox(bx,by,bg,value,label,icon){
     // Card background
     ctx.fillStyle=bg;rr(bx,by,bW,bH,bR);ctx.fill();
 
-    // Icon — absolute top-right, opacity 0.35
-    ctx.save();ctx.globalAlpha=0.35;
+    // Clip to box so emoji can never bleed outside
+    ctx.save();
+    rr(bx,by,bW,bH,bR);ctx.clip();
+
+    // Icon — absolute top-right, opacity 0.55
+    ctx.globalAlpha=0.55;
     ctx.font=iFs+'px serif';ctx.textAlign='right';
-    ctx.fillText(icon, bx+bW-iOff, by+iOff+Math.round(iFs*0.80));
+    // Top of glyph aligns with iMgn from box top
+    ctx.fillText(icon, bx+bW-iMgn, by+iMgn+Math.round(iFs*0.82));
+    ctx.globalAlpha=1.0;
     ctx.restore();
 
     // Value — bottom of card (justifyContent flex-end), bold white
@@ -229,7 +261,6 @@ function drawCard(land){
     var vBase2=vBase-lLh-gap; // value baseline (above label)
 
     ctx.fillStyle='#FFFFFF';
-    // Adjust font size if value string is long
     var vStr=String(value);
     var adjFs=vFs;
     if(vStr.length>4) adjFs=Math.round(vFs*0.70);
