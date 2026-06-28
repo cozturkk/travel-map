@@ -69,7 +69,72 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v7";
+const CACHE_KEY = "travel_data_v8";
+
+// Lookup: well-known sub-city localities → parent city name.
+// Covers London boroughs, NYC boroughs, Tokyo special wards, Paris arrondissements.
+const BOROUGH_TO_CITY: Record<string, string> = {
+  // London (32 boroughs + City of London)
+  hackney: "London", southwark: "London", westminster: "London",
+  "city of westminster": "London", islington: "London", camden: "London",
+  "tower hamlets": "London", lambeth: "London", wandsworth: "London",
+  "hammersmith and fulham": "London", "kensington and chelsea": "London",
+  lewisham: "London", greenwich: "London", newham: "London",
+  haringey: "London", barnet: "London", brent: "London",
+  ealing: "London", hounslow: "London", "richmond upon thames": "London",
+  "kingston upon thames": "London", merton: "London", croydon: "London",
+  sutton: "London", bromley: "London", bexley: "London",
+  havering: "London", "barking and dagenham": "London", redbridge: "London",
+  "waltham forest": "London", enfield: "London", harrow: "London",
+  hillingdon: "London", "city of london": "London",
+  // New York City boroughs
+  brooklyn: "New York City", manhattan: "New York City",
+  queens: "New York City", bronx: "New York City", "the bronx": "New York City",
+  "staten island": "New York City",
+  // Tokyo special wards (ku)
+  shinjuku: "Tokyo", shibuya: "Tokyo", minato: "Tokyo",
+  chiyoda: "Tokyo", chuo: "Tokyo", taito: "Tokyo",
+  sumida: "Tokyo", koto: "Tokyo", shinagawa: "Tokyo",
+  meguro: "Tokyo", setagaya: "Tokyo", suginami: "Tokyo",
+  toshima: "Tokyo", kita: "Tokyo", arakawa: "Tokyo",
+  itabashi: "Tokyo", nerima: "Tokyo", adachi: "Tokyo",
+  katsushika: "Tokyo", edogawa: "Tokyo", ota: "Tokyo",
+  nakano: "Tokyo", bunkyo: "Tokyo",
+};
+
+function resolveCity(
+  city: string | null | undefined,
+  subregion: string | null | undefined,
+  region: string | null | undefined
+): string | undefined {
+  // 1. Borough/ward lookup table (case-insensitive)
+  if (city) {
+    const key = city.toLowerCase().trim();
+    if (BOROUGH_TO_CITY[key]) return BOROUGH_TO_CITY[key];
+    // Paris arrondissements: "1er Arrondissement de Paris", "Paris 11e", etc.
+    if (/arrondissement/i.test(city) || /^paris\s+\d/i.test(city)) return "Paris";
+    // Tokyo wards: ends in "-ku" or " ku"
+    if (/[\s-]?ku$/i.test(city) && region?.toLowerCase().includes("tokyo")) return "Tokyo";
+  }
+
+  // 2. Clean admin suffixes from subregion
+  const cleanSub = subregion?.trim()
+    .replace(/\s+(Authority|Metropolitan\s+Area|Metropolitan\s+County|Council|Municipality|Prefecture-Metropolis|Prefecture|County)$/i, "")
+    .trim() ?? null;
+
+  // 3. "Greater X" → X  (e.g. "Greater London" → "London")
+  const greaterMatch = cleanSub?.match(/^Greater\s+(\w[\w\s]*)$/i);
+  if (greaterMatch) return greaterMatch[1].trim();
+
+  // 4. "City/County/Borough of X" → X  (e.g. "City of Glasgow")
+  const adminOfMatch = cleanSub?.match(
+    /^(?:City|County|Royal Borough|London Borough|Metropolitan Borough|District|Province|State)\s+of\s+(.+)$/i
+  );
+  if (adminOfMatch) return adminOfMatch[1].trim();
+
+  // 5. Default: locality → fall back to cleaned subregion or region
+  return city ?? cleanSub ?? region ?? undefined;
+}
 const MAX_PHOTOS = 2000;
 const BATCH_SIZE = 20;
 
@@ -266,33 +331,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           );
           if (results[0]) {
             const { country, city, region, subregion } = results[0];
-            // iOS returns locality (→ city) which can be a borough or neighbourhood.
-            // iOS subAdministrativeArea (→ subregion) is the wider metro/county area.
-            // Strategy: strip common admin suffixes, then check for known rollup patterns.
-            let cityName: string | undefined;
-            // Strip trailing admin noise before matching (e.g. "Greater London Authority" → "Greater London")
-            const cleanSub = subregion?.trim()
-              .replace(/\s+(Authority|Metropolitan\s+Area|Metropolitan\s+County|Council|Municipality|Prefecture-Metropolis|Prefecture)$/i, '')
-              .trim() ?? null;
-            // "Greater London" → "London", "Greater Manchester" → "Manchester"
-            const greaterMatch = cleanSub?.match(/^Greater\s+(\w[\w\s]*)$/i);
-            // "City of Glasgow", "County of Durham", "Royal Borough of Windsor" → extract last part
-            const adminOfMatch = cleanSub?.match(
-              /^(?:City|County|Royal Borough|London Borough|Metropolitan Borough|District|Province|State)\s+of\s+(.+)$/i
-            );
-            if (greaterMatch) {
-              cityName = greaterMatch[1].trim();
-            } else if (adminOfMatch) {
-              cityName = adminOfMatch[1].trim();
-            } else {
-              // Prefer city (locality) when it's a proper city name.
-              // Fall back to cleanSub if it's shorter (more specific parent city)
-              // or when city is missing.
-              const sub = cleanSub;
-              cityName = city
-                ? city
-                : (sub ?? region ?? undefined);
-            }
+            const cityName = resolveCity(city, subregion, region);
             bucketPhotos.forEach((p) => {
               p.country = country ?? undefined;
               p.city = cityName;
