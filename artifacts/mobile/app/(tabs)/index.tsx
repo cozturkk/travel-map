@@ -37,6 +37,38 @@ import { CC_JS, countryToFlag } from "@/utils/countryFlags";
 const MANUAL_VISITED_KEY = "manual_visited_v1";
 const TOTAL_COUNTRIES = 195;
 
+const CONTINENT_MAP: Record<string, string> = {
+  Algeria:"AF",Angola:"AF",Benin:"AF",Botswana:"AF",Cameroon:"AF",Egypt:"AF",
+  Ethiopia:"AF",Ghana:"AF","Ivory Coast":"AF",Kenya:"AF",Libya:"AF",
+  Madagascar:"AF",Mali:"AF",Morocco:"AF",Mozambique:"AF",Namibia:"AF",
+  Nigeria:"AF",Rwanda:"AF",Senegal:"AF",Somalia:"AF","South Africa":"AF",
+  Sudan:"AF",Tanzania:"AF",Tunisia:"AF",Uganda:"AF",Zambia:"AF",Zimbabwe:"AF",
+  Afghanistan:"AS",Armenia:"AS",Azerbaijan:"AS",Bahrain:"AS",Bangladesh:"AS",
+  Brunei:"AS",Cambodia:"AS",China:"AS",Cyprus:"AS",Georgia:"AS",India:"AS",
+  Indonesia:"AS",Iran:"AS",Iraq:"AS",Israel:"AS",Japan:"AS",Jordan:"AS",
+  Kazakhstan:"AS",Kuwait:"AS",Laos:"AS",Lebanon:"AS",Malaysia:"AS",
+  Maldives:"AS",Mongolia:"AS",Myanmar:"AS",Nepal:"AS",Oman:"AS",Pakistan:"AS",
+  Palestine:"AS",Philippines:"AS",Qatar:"AS","Saudi Arabia":"AS",
+  Singapore:"AS","South Korea":"AS","Sri Lanka":"AS",Syria:"AS",Taiwan:"AS",
+  Thailand:"AS",Turkey:"AS","United Arab Emirates":"AS",Uzbekistan:"AS",
+  Vietnam:"AS",Yemen:"AS",
+  Albania:"EU",Austria:"EU",Belarus:"EU",Belgium:"EU",
+  "Bosnia and Herzegovina":"EU",Bulgaria:"EU",Croatia:"EU",
+  "Czech Republic":"EU",Denmark:"EU",Estonia:"EU",Finland:"EU",France:"EU",
+  Germany:"EU",Greece:"EU",Hungary:"EU",Iceland:"EU",Ireland:"EU",Italy:"EU",
+  Kosovo:"EU",Latvia:"EU",Lithuania:"EU",Luxembourg:"EU",Malta:"EU",
+  Moldova:"EU",Montenegro:"EU",Netherlands:"EU","North Macedonia":"EU",
+  Norway:"EU",Poland:"EU",Portugal:"EU",Romania:"EU",Russia:"EU",Serbia:"EU",
+  Slovakia:"EU",Slovenia:"EU",Spain:"EU",Sweden:"EU",Switzerland:"EU",
+  Ukraine:"EU","United Kingdom":"EU",
+  Bahamas:"NA",Canada:"NA",Cuba:"NA","Dominican Republic":"NA",
+  "El Salvador":"NA",Guatemala:"NA",Honduras:"NA",Jamaica:"NA",
+  Mexico:"NA",Panama:"NA","United States":"NA",
+  Argentina:"SA",Bolivia:"SA",Brazil:"SA",Chile:"SA",Colombia:"SA",
+  Ecuador:"SA",Paraguay:"SA",Peru:"SA",Uruguay:"SA",Venezuela:"SA",
+  Australia:"OC",Fiji:"OC","New Zealand":"OC","Papua New Guinea":"OC",
+};
+
 function formatDateRange(first: number, last: number) {
   const opts: Intl.DateTimeFormatOptions = { month: "short", year: "numeric" };
   const f = new Date(first).toLocaleDateString("en-US", opts);
@@ -271,14 +303,31 @@ export default function MapTab() {
   const [shareVisible, setShareVisible] = useState(false);
   const travelMonthMap = useMemo(() => buildMonthMap(photos), [photos]);
   const travelStreaks = useMemo(() => calcStreaks(travelMonthMap), [travelMonthMap]);
-  const shareStats = useMemo<ShareStats>(() => ({
-    countries: allVisited.length,
-    bucket: bucketList.length,
-    streak: travelStreaks.current,
-    best: travelStreaks.longest,
-    months: travelStreaks.total,
-    visitedCountries: allVisited,
-  }), [allVisited, bucketList.length, travelStreaks]);
+  const shareStats = useMemo<ShareStats>(() => {
+    const currentYear = new Date().getFullYear();
+    const startOfYear = new Date(currentYear, 0, 1).getTime();
+    const visitedContinents = new Set(
+      allVisited.map((c) => CONTINENT_MAP[c]).filter(Boolean)
+    );
+    const countriesThisYear = countries.filter(
+      (cv) => cv.lastDate >= startOfYear
+    ).length;
+    const yearCounts: Record<number, number> = {};
+    for (const p of photos) {
+      const yr = new Date(p.creationTime).getFullYear();
+      yearCounts[yr] = (yearCounts[yr] ?? 0) + 1;
+    }
+    const busiestYear =
+      Object.keys(yearCounts).length > 0
+        ? Number(Object.entries(yearCounts).sort((a, b) => b[1] - a[1])[0][0])
+        : currentYear;
+    return {
+      countries: allVisited.length,
+      continents: visitedContinents.size,
+      countriesThisYear,
+      busiestYear,
+    };
+  }, [allVisited, countries, photos]);
 
   const [detailCountry, setDetailCountry] = useState<CountryVisit | null>(null);
   const [detailModal, setDetailModal] = useState(false);
