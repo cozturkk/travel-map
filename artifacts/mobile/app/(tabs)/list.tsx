@@ -81,23 +81,27 @@ const pvStyles = StyleSheet.create({
 
 function TripSummaryBar({ countries, photos }: { countries: CountryVisit[]; photos: PhotoAsset[] }) {
   const colors = useColors();
-  const totalCities = countries.reduce((a, c) => a + c.cities.length, 0);
-  const items = [
-    { value: countries.length, label: "countries" },
-    { value: totalCities, label: "cities" },
-    { value: photos.length, label: "photos" },
-  ];
+  const currentYear = new Date().getFullYear();
+  const countriesThisYear = countries.filter(
+    (c) => new Date(c.lastDate).getFullYear() >= currentYear && new Date(c.firstDate).getFullYear() <= currentYear
+  ).length;
   return (
     <View style={[styles.summaryBar, { backgroundColor: colors.card }]}>
-      {items.map((s, i) => (
-        <React.Fragment key={s.label}>
-          {i > 0 && <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />}
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNum, { color: colors.foreground }]}>{s.value}</Text>
-            <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
-          </View>
-        </React.Fragment>
-      ))}
+      <View style={styles.summaryItem}>
+        <Text style={[styles.summaryNum, { color: colors.foreground }]}>{countries.length}</Text>
+        <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>countries</Text>
+      </View>
+      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+      <View style={styles.summaryItem}>
+        <Text style={[styles.summaryNum, { color: colors.foreground }]}>{countriesThisYear}</Text>
+        <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>countries</Text>
+        <Text style={[styles.summaryYearTag, { color: colors.accent }]}>in {currentYear}</Text>
+      </View>
+      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+      <View style={styles.summaryItem}>
+        <Text style={[styles.summaryNum, { color: colors.foreground }]}>{photos.length}</Text>
+        <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>photos</Text>
+      </View>
     </View>
   );
 }
@@ -368,6 +372,7 @@ const styles = StyleSheet.create({
   summaryNum: { fontSize: 26, fontFamily: "Inter_700Bold", lineHeight: 30 },
   summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6 },
   summaryDivider: { width: 1, marginVertical: 6 },
+  summaryYearTag: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 1 },
 
   homeCitySection: { paddingHorizontal: 16, marginTop: 12, marginBottom: 0 },
   homeCityCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },

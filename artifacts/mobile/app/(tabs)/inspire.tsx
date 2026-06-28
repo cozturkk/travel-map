@@ -7,6 +7,7 @@ import Animated, {
 } from "react-native-reanimated";
 import {
   ActivityIndicator,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -205,6 +206,7 @@ export default function InspireTab() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedDistance, setSelectedDistance] = useState<DistancePref>("any");
   const [selectedCityIdx, setSelectedCityIdx] = useState<number | null>(null);
+  const [cityPickerVisible, setCityPickerVisible] = useState(false);
   const [results, setResults] = useState<Destination[] | null>(null);
   const [resultDistances, setResultDistances] = useState<(number | undefined)[]>([]);
   const [loading, setLoading] = useState(false);
@@ -340,60 +342,23 @@ export default function InspireTab() {
                 Where are you flying from?
               </Text>
               <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
-                Optional — enables precise distance filtering
+                Optional - enables precise distance filtering
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.cityRow}
+              <TouchableOpacity
+                onPress={() => setCityPickerVisible(true)}
+                activeOpacity={0.7}
+                style={[styles.cityDropdown, { backgroundColor: colors.card, borderColor: selectedCity ? colors.primary : colors.border }]}
               >
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSelectedCityIdx(null);
-                  }}
-                  style={[
-                    styles.cityChip,
-                    {
-                      backgroundColor: selectedCityIdx === null ? colors.card : "transparent",
-                      borderColor: selectedCityIdx === null ? colors.foreground : colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={[
-                    styles.cityChipText,
-                    { color: selectedCityIdx === null ? colors.foreground : colors.mutedForeground },
-                  ]}>
-                    Anywhere
-                  </Text>
-                </Pressable>
-                {DEPARTURE_CITIES.map((city, idx) => {
-                  const selected = selectedCityIdx === idx;
-                  return (
-                    <Pressable
-                      key={city.name}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedCityIdx(selected ? null : idx);
-                      }}
-                      style={[
-                        styles.cityChip,
-                        {
-                          backgroundColor: selected ? colors.primary : "transparent",
-                          borderColor: selected ? colors.primary : colors.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[
-                        styles.cityChipText,
-                        { color: selected ? colors.primaryForeground : colors.mutedForeground },
-                      ]}>
-                        {city.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+                <Ionicons
+                  name="airplane-outline"
+                  size={16}
+                  color={selectedCity ? colors.primary : colors.mutedForeground}
+                />
+                <Text style={[styles.cityDropdownText, { color: selectedCity ? colors.foreground : colors.mutedForeground }]}>
+                  {selectedCity ? selectedCity.name : "Anywhere"}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={colors.mutedForeground} style={{ marginLeft: "auto" }} />
+              </TouchableOpacity>
             </View>
 
             {/* Distance */}
@@ -540,6 +505,55 @@ export default function InspireTab() {
           </Animated.View>
         )}
       </ScrollView>
+
+      {/* City picker modal */}
+      <Modal
+        visible={cityPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCityPickerVisible(false)}
+      >
+        <Pressable style={styles.cityModalOverlay} onPress={() => setCityPickerVisible(false)}>
+          <Pressable
+            style={[styles.cityModalSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}
+            onPress={() => {}}
+          >
+            <View style={[styles.cityModalHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.cityModalTitle, { color: colors.foreground }]}>Flying from</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.cityModalList}>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedCityIdx(null);
+                  setCityPickerVisible(false);
+                }}
+                style={[styles.cityModalRow, { borderBottomColor: colors.border }]}
+              >
+                <Text style={[styles.cityModalRowText, { color: selectedCityIdx === null ? colors.primary : colors.foreground }]}>
+                  Anywhere
+                </Text>
+                {selectedCityIdx === null && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+              </TouchableOpacity>
+              {DEPARTURE_CITIES.map((city, idx) => (
+                <TouchableOpacity
+                  key={city.name}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSelectedCityIdx(idx);
+                    setCityPickerVisible(false);
+                  }}
+                  style={[styles.cityModalRow, { borderBottomColor: colors.border }]}
+                >
+                  <Text style={[styles.cityModalRowText, { color: selectedCityIdx === idx ? colors.primary : colors.foreground }]}>
+                    {city.name}
+                  </Text>
+                  {selectedCityIdx === idx && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -609,20 +623,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
-  cityRow: {
-    gap: 8,
-    paddingVertical: 4,
-    marginTop: 4,
-  },
-  cityChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+  cityDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
     borderWidth: 1.5,
   },
-  cityChipText: {
-    fontSize: 13,
+  cityDropdownText: {
+    fontSize: 15,
     fontFamily: "Inter_500Medium",
+    flex: 1,
+  },
+  cityModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  cityModalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+    maxHeight: "70%",
+  },
+  cityModalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  cityModalTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_600SemiBold",
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  cityModalList: {
+    flexGrow: 0,
+  },
+  cityModalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  cityModalRowText: {
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
   },
   distanceGrid: {
     flexDirection: "row",
