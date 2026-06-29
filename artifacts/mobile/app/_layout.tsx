@@ -17,6 +17,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TravelProvider } from "@/context/TravelContext";
 import { BucketListProvider } from "@/context/BucketListContext";
 import { HomeCityProvider } from "@/context/HomeCityContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,13 +53,15 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
-              <HomeCityProvider>
-                <TravelProvider>
-                  <BucketListProvider>
-                    <RootLayoutNav />
-                  </BucketListProvider>
-                </TravelProvider>
-              </HomeCityProvider>
+              <AuthProvider>
+                <HomeCityProvider>
+                  <TravelProvider>
+                    <BucketListProvider>
+                      <RootLayoutNav />
+                    </BucketListProvider>
+                  </TravelProvider>
+                </HomeCityProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

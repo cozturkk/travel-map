@@ -103,7 +103,7 @@ function draw(){
   ctx.fillText(String(D.n),W/2,500);
   ctx.fillStyle='rgba(148,163,184,0.70)';
   ctx.font='500 60px -apple-system,system-ui,sans-serif';
-  ctx.fillText('countries explored',W/2,576);
+  ctx.fillText('\uD83C\uDF0D countries explored',W/2,576);
   // "so far" + amber period
   ctx.textAlign='left';
   var sf='so far';
@@ -120,16 +120,20 @@ function draw(){
     rr(x,y,w,h,30);ctx.fillStyle=fill;ctx.fill();
     ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();
   }
-  function statBox(x,y,w,h,val,label,accent){
+  function statBox(x,y,w,h,val,label,accent,emoji){
     shell(x,y,w,h,'rgba(255,255,255,0.045)','rgba(255,255,255,0.09)');
     ctx.textAlign='center';
-    ctx.fillStyle=accent||'#F8FAFC';
-    ctx.font='800 92px -apple-system,system-ui,sans-serif';
     ctx.textBaseline='alphabetic';
-    ctx.fillText(val,x+w/2,y+h*0.56);
+    if(emoji){
+      ctx.font='64px -apple-system,system-ui,sans-serif';
+      ctx.fillText(emoji,x+w/2,y+78);
+    }
+    ctx.fillStyle=accent||'#F8FAFC';
+    ctx.font='800 88px -apple-system,system-ui,sans-serif';
+    ctx.fillText(val,x+w/2,y+h*0.62);
     ctx.fillStyle='rgba(148,163,184,0.72)';
     ctx.font='500 38px -apple-system,system-ui,sans-serif';
-    ctx.fillText(label,x+w/2,y+h-44);
+    ctx.fillText(label,x+w/2,y+h-40);
   }
 
   // THIS YEAR highlight box
@@ -138,7 +142,7 @@ function draw(){
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
   ctx.fillStyle='#F59E0B';
   ctx.font='700 34px -apple-system,system-ui,sans-serif';
-  ctx.fillText('THIS YEAR · '+String(D.yr),tyX+44,tyY+66);
+  ctx.fillText('\uD83D\uDCC5  THIS YEAR \u00B7 '+String(D.yr),tyX+44,tyY+66);
   // vertical divider
   ctx.strokeStyle='rgba(245,158,11,0.22)';ctx.lineWidth=1.5;
   ctx.beginPath();ctx.moveTo(tyX+tyW/2,tyY+96);ctx.lineTo(tyX+tyW/2,tyY+tyH-44);ctx.stroke();
@@ -149,18 +153,18 @@ function draw(){
   ctx.fillText(String(D.cy),cL,vY);
   ctx.fillText(String(D.ic),cR,vY);
   ctx.fillStyle='rgba(148,163,184,0.78)';ctx.font='500 36px -apple-system,system-ui,sans-serif';
-  ctx.fillText('countries',cL,tyY+tyH-40);
-  ctx.fillText('cities',cR,tyY+tyH-40);
+  ctx.fillText('\uD83C\uDF0E countries',cL,tyY+tyH-40);
+  ctx.fillText('\uD83C\uDFD8\uFE0F cities',cR,tyY+tyH-40);
 
   // 2x2 grid
   var gap=30;
   var bw=(W-2*P-gap)/2, bh=288;
   var r1=1010, r2=r1+bh+gap;
   var xL=P, xR=P+bw+gap;
-  statBox(xL,r1,bw,bh,String(D.ci),'cities explored',null);
-  statBox(xR,r1,bw,bh,String(D.co)+'/7','continents',null);
-  statBox(xL,r2,bw,bh,String(D.pct)+'%','of the world',null);
-  statBox(xR,r2,bw,bh,String(D.ts),'exploring since',null);
+  statBox(xL,r1,bw,bh,String(D.ci),'cities explored',null,'\uD83C\uDFD9\uFE0F');
+  statBox(xR,r1,bw,bh,String(D.co)+'/7','continents',null,'\uD83C\uDF0D');
+  statBox(xL,r2,bw,bh,String(D.pct)+'%','of the world',null,'\uD83E\uDDED');
+  statBox(xR,r2,bw,bh,String(D.ts),'exploring since',null,'\u2708\uFE0F');
 
   // Footer
   ctx.fillStyle='rgba(255,255,255,0.04)';

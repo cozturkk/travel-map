@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import TabTip from "@/components/TabTip";
 import { useTravel } from "@/context/TravelContext";
 import {
   Destination,
@@ -317,6 +318,13 @@ export default function InspireTab() {
           </Text>
         </View>
 
+        <TabTip
+          id="inspire"
+          icon="sparkles-outline"
+          title="Get personalized ideas"
+          text="Pick a vibe, the month you'll travel, and how far you'll fly. We'll suggest destinations that fit — minus the ones you've already been to."
+        />
+
         {!results && !loading && (
           <Animated.View entering={FadeIn} exiting={FadeOut}>
             {/* Travel style */}
@@ -508,13 +516,25 @@ export default function InspireTab() {
           <Animated.View entering={FadeIn}>
             <View style={styles.resultsHeader}>
               <Text style={[styles.resultsTitle, { color: colors.foreground }]}>
-                5 destinations for you
+                {results.length} {results.length === 1 ? "destination" : "destinations"} for you
               </Text>
               <Text style={[styles.resultsSub, { color: colors.mutedForeground }]}>
                 {MONTHS[selectedMonth - 1]} · {selectedStyles.map((s) => STYLE_OPTIONS.find((o) => o.id === s)?.label).join(", ")}
                 {selectedCity ? ` · from ${selectedCity.name}` : ""}
               </Text>
             </View>
+
+            {results.length === 0 && (
+              <View style={styles.emptyResults}>
+                <Ionicons name="compass-outline" size={40} color={colors.mutedForeground} />
+                <Text style={[styles.emptyResultsTitle, { color: colors.foreground }]}>
+                  No matches this time
+                </Text>
+                <Text style={[styles.emptyResultsText, { color: colors.mutedForeground }]}>
+                  Try widening the distance or adding another travel style.
+                </Text>
+              </View>
+            )}
 
             <View style={{ paddingHorizontal: 20, gap: 16 }}>
               {results.map((dest, i) => (
@@ -826,6 +846,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_400Regular",
   },
+  emptyResults: { alignItems: "center", paddingHorizontal: 32, paddingVertical: 28, gap: 8 },
+  emptyResultsTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  emptyResultsText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20 },
   resultsHeader: {
     paddingHorizontal: 20,
     paddingBottom: 16,

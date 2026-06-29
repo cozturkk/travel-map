@@ -10,10 +10,12 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -29,6 +31,7 @@ import { useColors } from "@/hooks/useColors";
 import { CountryVisit, useTravel } from "@/context/TravelContext";
 import { useBucketList } from "@/context/BucketListContext";
 import PermissionGate from "@/components/PermissionGate";
+import TabTip from "@/components/TabTip";
 import ShareCard, { ShareStats } from "@/components/ShareCard";
 import { buildMonthMap, calcStreaks } from "@/utils/travelStats";
 import { WORLD_COUNTRIES } from "@/data/worldCountries";
@@ -110,6 +113,19 @@ var path=d3.geoPath().projection(proj).context(ctx);
 var grat=d3.geoGraticule()();
 var features=[],centroids={},visited={},bucketList={};
 var rot=[10,-20],autoRot=true,resumeT;
+
+function resizeGlobe(){
+  var zf=scaleR/baseR;
+  W=window.innerWidth;H=window.innerHeight;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);
+  baseR=Math.min(W,H)*0.47;scaleR=baseR*zf;
+  proj.scale(scaleR).translate([W/2,H/2]);
+  draw();
+}
+var _rzT;
+window.addEventListener('resize',function(){clearTimeout(_rzT);_rzT=setTimeout(resizeGlobe,50);});
 
 function isOnFront(lng,lat){
   var p1=lat*Math.PI/180,L1=lng*Math.PI/180;
@@ -213,25 +229,62 @@ function handleTap(x,y){
   }
 }
 
-// Load countries
-fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson')
-  .then(function(r){return r.json();})
-  .then(function(data){
-    document.getElementById('ld').style.display='none';
-    features=data.features;
-    features.forEach(function(f){
-      var n=f.properties.ADMIN||f.properties.name||'';
-      if(n){try{var c=d3.geoCentroid(f);if(isFinite(c[0])&&isFinite(c[1]))centroids[n]={lng:c[0],lat:c[1]};}catch(e){}}
-    });
-    tick();
-    sendUp(JSON.stringify({type:'mapReady'}));
-  })
-  .catch(function(){document.getElementById('ld').textContent='Globe unavailable';tick();sendUp(JSON.stringify({type:'mapError'}));});
+// Load countries — resilient loader with cache, timeout and retry so long
+// sessions don't fail with a network timeout.
+var GEO_URL='https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson';
+var GEO_CACHE_KEY='tm_geojson_v1';
+function applyGeo(data){
+  document.getElementById('ld').style.display='none';
+  features=data.features;
+  features.forEach(function(f){
+    var n=f.properties.ADMIN||f.properties.name||'';
+    if(n){try{var c=d3.geoCentroid(f);if(isFinite(c[0])&&isFinite(c[1]))centroids[n]={lng:c[0],lat:c[1]};}catch(e){}}
+  });
+  tick();
+  sendUp(JSON.stringify({type:'mapReady'}));
+}
+function cacheGet(){try{var v=window.localStorage&&localStorage.getItem(GEO_CACHE_KEY);return v?JSON.parse(v):null;}catch(e){return null;}}
+function cacheSet(t){try{if(window.localStorage)localStorage.setItem(GEO_CACHE_KEY,t);}catch(e){}}
+function fetchGeo(attempt){
+  var xhr=new XMLHttpRequest();
+  var done=false;
+  xhr.open('GET',GEO_URL,true);
+  xhr.timeout=15000;
+  function fail(){
+    if(done)return;done=true;
+    if(attempt<3){
+      document.getElementById('ld').textContent='Loading globe… (retry '+attempt+')';
+      setTimeout(function(){fetchGeo(attempt+1);},800*attempt);
+    } else {
+      var cached=cacheGet();
+      if(cached){applyGeo(cached);} 
+      else {document.getElementById('ld').textContent='Globe unavailable — tap to retry';
+        document.getElementById('ld').onclick=function(){document.getElementById('ld').onclick=null;document.getElementById('ld').textContent='Loading globe…';fetchGeo(1);};
+        tick();sendUp(JSON.stringify({type:'mapError'}));}
+    }
+  }
+  xhr.onload=function(){
+    if(done)return;
+    if(xhr.status>=200&&xhr.status<300){
+      done=true;
+      try{var data=JSON.parse(xhr.responseText);cacheSet(xhr.responseText);applyGeo(data);}catch(e){fail();}
+    } else { fail(); }
+  };
+  xhr.ontimeout=fail;xhr.onerror=fail;
+  try{xhr.send();}catch(e){fail();}
+}
+// Country borders are static — use the cached copy if we have one, else fetch.
+(function(){
+  var cached=cacheGet();
+  if(cached){applyGeo(cached);}
+  else{document.getElementById('ld').textContent='Loading globe…';fetchGeo(1);}
+})();
 
 function handleMsg(e){
   try{
     var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
-    if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});draw();}
+    if(d.type==='resize'){resizeGlobe();}
+    else if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});draw();}
     else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});draw();}
     else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];draw();}
     else if(d.type==='markBucket'){bucketList[d.country]=true;draw();}
@@ -309,9 +362,14 @@ export default function MapTab() {
     const visitedContinents = new Set(
       allVisited.map((c) => CONTINENT_MAP[c]).filter(Boolean)
     );
-    // Total distinct cities across every visited country
+    // Total distinct cities across every visited country (from photos)
     const allCities = countries.flatMap((cv) => cv.cities);
-    const cities = allCities.length;
+    // Each manually-added country (one not already seen in photos) bumps the
+    // share-card city count by one too, keeping countries & cities in step.
+    const manualOnly = manuallyVisited.filter(
+      (c) => !visitedCountryNames.includes(c)
+    );
+    const cities = allCities.length + manualOnly.length;
     // This-year counts
     const countriesThisYear = countries.filter(
       (cv) => cv.lastDate >= startOfYear
@@ -337,7 +395,7 @@ export default function MapTab() {
       citiesThisYear,
       travelingSince,
     };
-  }, [allVisited, countries, photos]);
+  }, [allVisited, countries, photos, manuallyVisited, visitedCountryNames]);
 
   const [detailCountry, setDetailCountry] = useState<CountryVisit | null>(null);
   const [detailModal, setDetailModal] = useState(false);
@@ -354,6 +412,8 @@ export default function MapTab() {
   const topPad = isWeb ? 67 : insets.top;
   const { height: SH } = Dimensions.get("window");
   const GLOBE_H = Math.round(SH * 0.48);
+  const GLOBE_MIN = Math.round(SH * 0.24);
+  const GLOBE_RANGE = GLOBE_H - GLOBE_MIN;
 
   const pct = Math.round((allVisited.length / TOTAL_COUNTRIES) * 100);
 
@@ -376,6 +436,53 @@ export default function MapTab() {
       webviewRef.current?.injectJavaScript(`(function(){handleMsg({data:${escaped}});})();true;`);
     }
   }, [isWeb]);
+
+  // ── Draggable stats sheet: pull up to enlarge stats + shrink the globe ──
+  const sheet = useRef(new Animated.Value(0)).current; // 0 = normal, 1 = expanded
+  const sheetVal = useRef(0);
+  const dragStart = useRef(0);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const id = sheet.addListener(({ value }) => { sheetVal.current = value; });
+    return () => sheet.removeListener(id);
+  }, [sheet]);
+  const globeHeight = sheet.interpolate({
+    inputRange: [0, 1],
+    outputRange: [GLOBE_H, GLOBE_MIN],
+  });
+  const snapTo = useCallback((to: 0 | 1) => {
+    sendToMap({ type: "resize" });
+    Animated.spring(sheet, {
+      toValue: to,
+      useNativeDriver: false,
+      bounciness: 2,
+      speed: 12,
+    }).start(() => {
+      setExpanded(to === 1);
+      sendToMap({ type: "resize" });
+    });
+  }, [sheet, sendToMap]);
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderGrant: () => {
+        sheet.stopAnimation((v: number) => { dragStart.current = v; });
+      },
+      onPanResponderMove: (_, g) => {
+        const next = Math.max(0, Math.min(1, dragStart.current - g.dy / GLOBE_RANGE));
+        sheet.setValue(next);
+      },
+      onPanResponderRelease: (_, g) => {
+        const cur = Math.max(0, Math.min(1, dragStart.current - g.dy / GLOBE_RANGE));
+        let target: 0 | 1;
+        if (g.vy < -0.5) target = 1;
+        else if (g.vy > 0.5) target = 0;
+        else target = cur > 0.5 ? 1 : 0;
+        snapTo(target);
+      },
+    })
+  ).current;
 
   useEffect(() => {
     if (!mapReady || allVisited.length === 0) return;
@@ -493,8 +600,8 @@ export default function MapTab() {
         </View>
       </View>
 
-      {/* ── Globe section ── starts right below the top bar */}
-      <View style={[styles.globeSection, { height: GLOBE_H }]}>
+      {/* ── Globe section ── animates smaller when stats sheet is pulled up */}
+      <Animated.View style={[styles.globeSection, { height: globeHeight }]}>
         {isWeb ? (
           <WebIframe srcDoc={GLOBE_HTML} iframeRef={iframeRef} />
         ) : (
@@ -531,15 +638,40 @@ export default function MapTab() {
             </Text>
           </View>
         )}
-      </View>
+      </Animated.View>
 
-      {/* ── Stats + Flags panel ── */}
-      <ScrollView
-        style={[styles.panel, { backgroundColor: colors.background }]}
-        contentContainerStyle={[styles.panelContent, { paddingBottom: insets.bottom + 88 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={[styles.panelTitle, { color: colors.foreground }]}>Travel Stats</Text>
+      {/* ── Stats sheet ── drag the header to grow stats / shrink the globe ── */}
+      <View style={styles.sheetWrap}>
+        <View
+          style={[styles.sheetHeader, { backgroundColor: colors.background }]}
+          {...panResponder.panHandlers}
+        >
+          <View style={[styles.grabber, { backgroundColor: colors.border }]} />
+          <View style={styles.sheetHeaderRow}>
+            <Text style={[styles.panelTitle, { color: colors.foreground }]}>Travel Stats</Text>
+            <TouchableOpacity
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); snapTo(expanded ? 0 : 1); }}
+              hitSlop={10}
+            >
+              <Ionicons
+                name={expanded ? "chevron-down" : "chevron-up"}
+                size={22}
+                color={colors.mutedForeground}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <TabTip
+          id="map"
+          icon="hand-left-outline"
+          title="Mark where you've been"
+          text="Tap any country on the globe to mark it visited, or use the + button at the top. Pull this panel up for the full stats view."
+        />
+        <ScrollView
+          style={[styles.panel, { backgroundColor: colors.background }]}
+          contentContainerStyle={[styles.panelContent, { paddingBottom: insets.bottom + 88 }]}
+          showsVerticalScrollIndicator={false}
+        >
 
         <View style={styles.bigStatRow}>
           <BigStatCard
@@ -596,7 +728,8 @@ export default function MapTab() {
             </Text>
           </View>
         )}
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       {/* Share Card */}
       <ShareCard
@@ -900,9 +1033,13 @@ const styles = StyleSheet.create({
   },
   hintText: { fontSize: 12, fontFamily: "Inter_400Regular" },
 
+  sheetWrap: { flex: 1 },
+  sheetHeader: { paddingTop: 8, paddingHorizontal: 20, paddingBottom: 6 },
+  grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: "center", marginBottom: 10, opacity: 0.8 },
+  sheetHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   panel: { flex: 1 },
-  panelContent: { padding: 20, gap: 0 },
-  panelTitle: { fontSize: 26, fontFamily: "Inter_700Bold", marginBottom: 16 },
+  panelContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 20, gap: 0 },
+  panelTitle: { fontSize: 26, fontFamily: "Inter_700Bold" },
 
   bigStatRow: { flexDirection: "row", gap: 12, marginBottom: 24 },
 

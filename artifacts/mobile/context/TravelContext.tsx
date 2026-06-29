@@ -66,6 +66,8 @@ interface TravelContextType {
   countries: CountryVisit[];
   visitedCountryNames: string[];
   refresh: () => Promise<void>;
+  addMorePhotos: () => Promise<void>;
+  accessPrivileges: "all" | "limited" | "none" | null;
 }
 
 const TravelContext = createContext<TravelContextType | null>(null);
@@ -274,6 +276,9 @@ function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
 }
 
 export function TravelProvider({ children }: { children: React.ReactNode }) {
+  const [accessPrivileges, setAccessPrivileges] = useState<
+    "all" | "limited" | "none" | null
+  >(null);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(
     Platform.OS === "web" ? true : null
   );
@@ -293,7 +298,9 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
 
   async function checkPermission() {
     if (!MediaLibrary) return;
-    const { status } = await MediaLibrary.getPermissionsAsync();
+    const perm = await MediaLibrary.getPermissionsAsync();
+    const { status } = perm;
+    setAccessPrivileges((perm.accessPrivileges as any) ?? null);
     if (status === "granted") {
       setPermissionGranted(true);
       loadTravelData();
@@ -304,7 +311,9 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
 
   const requestPermission = useCallback(async () => {
     if (!MediaLibrary) return;
-    const { status } = await MediaLibrary.requestPermissionsAsync();
+    const perm = await MediaLibrary.requestPermissionsAsync();
+    const { status } = perm;
+    setAccessPrivileges((perm.accessPrivileges as any) ?? null);
     if (status === "granted") {
       setPermissionGranted(true);
       await loadTravelData();
@@ -393,9 +402,15 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
       for (const [key, bucketPhotos] of locationBuckets) {
         const [lat, lon] = key.split(",").map(Number);
         try {
-          const results = await Location.reverseGeocodeAsync(
-            { latitude: lat, longitude: lon }
-          );
+          // Race each lookup against a timeout so one hung/rate-limited
+          // reverse-geocode can't stall the whole load (the cause of the
+          // "timeout" some users saw after long sessions).
+          const results = (await Promise.race([
+            Location.reverseGeocodeAsync({ latitude: lat, longitude: lon }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("geocode-timeout")), 6000)
+            ),
+          ])) as Awaited<ReturnType<typeof Location.reverseGeocodeAsync>>;
           if (results[0]) {
             const { country, city, region, subregion } = results[0];
             // Parent-city rollup: snap GPS to nearest metro first (handles
@@ -442,6 +457,26 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     await loadTravelData();
   }, [loadTravelData]);
 
+  // Let the user pick more photos (limited access) or grant full access,
+  // then re-scan so newly-allowed photos show up in their travel history.
+  const addMorePhotos = useCallback(async () => {
+    if (!MediaLibrary) return;
+    const perm = await MediaLibrary.getPermissionsAsync();
+    if (perm.status !== "granted") {
+      const req = await MediaLibrary.requestPermissionsAsync();
+      setAccessPrivileges((req.accessPrivileges as any) ?? null);
+      if (req.status === "granted") setPermissionGranted(true);
+    } else if (
+      perm.accessPrivileges === "limited" &&
+      MediaLibrary.presentPermissionsPickerAsync
+    ) {
+      await MediaLibrary.presentPermissionsPickerAsync();
+      const after = await MediaLibrary.getPermissionsAsync();
+      setAccessPrivileges((after.accessPrivileges as any) ?? null);
+    }
+    await refresh();
+  }, [refresh]);
+
   const visitedCountryNames = countries.map((c) => c.country);
 
   return (
@@ -455,6 +490,8 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
         countries,
         visitedCountryNames,
         refresh,
+        addMorePhotos,
+        accessPrivileges,
       }}
     >
       {children}

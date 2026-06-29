@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import TabTip from "@/components/TabTip";
 import { CityVisit, CountryVisit, PhotoAsset, useTravel } from "@/context/TravelContext";
 import { useHomeCity } from "@/context/HomeCityContext";
 import { countryToFlag } from "@/utils/countryFlags";
@@ -219,13 +220,18 @@ function YearHeader({ year }: { year: string }) {
 export default function ListTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { permissionGranted, isLoading, progress, countries, photos, refresh } = useTravel();
+  const { permissionGranted, isLoading, progress, countries, photos, refresh, addMorePhotos, accessPrivileges } = useTravel();
   const { homeCity } = useHomeCity();
 
   const [viewerState, setViewerState] = useState<{ uris: string[]; index: number } | null>(null);
   const openViewer = useCallback((uris: string[], index: number) => {
     setViewerState({ uris, index });
   }, []);
+
+  const handleAddPhotos = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    addMorePhotos();
+  }, [addMorePhotos]);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
@@ -291,12 +297,20 @@ export default function ListTab() {
         <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
           Photos with GPS location data will appear here as your travel history.
         </Text>
-        <TouchableOpacity
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); refresh(); }}
-          style={[styles.refreshBtn, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.refreshBtnText, { color: colors.primaryForeground }]}>Refresh</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+          <TouchableOpacity
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); refresh(); }}
+            style={[styles.refreshBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginTop: 0 }]}
+          >
+            <Text style={[styles.refreshBtnText, { color: colors.foreground }]}>Refresh</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleAddPhotos}
+            style={[styles.refreshBtn, { backgroundColor: colors.primary, marginTop: 0 }]}
+          >
+            <Text style={[styles.refreshBtnText, { color: colors.primaryForeground }]}>Add Photos</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -317,7 +331,29 @@ export default function ListTab() {
         }
         ListHeaderComponent={
           <View style={{ paddingBottom: 4 }}>
+            <TabTip
+              id="trips"
+              icon="images-outline"
+              title="Build your travel history"
+              text="Add your photos and we'll map every city you've visited automatically. Tap “Add more photos” anytime to include new ones."
+            />
             <TripSummaryBar countries={tripCountries} photos={tripPhotos} />
+
+            <TouchableOpacity
+              onPress={handleAddPhotos}
+              activeOpacity={0.85}
+              style={[styles.addPhotosBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+              <Text style={[styles.addPhotosText, { color: colors.foreground }]}>
+                Add more photos
+              </Text>
+              {accessPrivileges === "limited" && (
+                <Text style={[styles.addPhotosHint, { color: colors.mutedForeground }]}>
+                  limited access
+                </Text>
+              )}
+            </TouchableOpacity>
 
             {homeCountryVisit && (
               <View style={styles.homeCitySection}>
@@ -358,6 +394,9 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", marginTop: 4 },
   emptyText: { fontSize: 15, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
   refreshBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  addPhotosBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 20, marginTop: 12, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1 },
+  addPhotosText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  addPhotosHint: { fontSize: 12, fontFamily: "Inter_400Regular", marginLeft: "auto" },
   refreshBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 
   summaryBar: { flexDirection: "row", borderRadius: 16, marginHorizontal: 16, marginTop: 4, paddingVertical: 16 },
@@ -383,8 +422,8 @@ const styles = StyleSheet.create({
   // Year header
   yearHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, gap: 10 },
   yearLine: { flex: 1, height: 1 },
-  yearPill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
-  yearText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  yearPill: { paddingHorizontal: 18, paddingVertical: 7, borderRadius: 16, borderWidth: 1 },
+  yearText: { fontSize: 30, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
 
   // Chrono item
   chronoBlock: { borderBottomWidth: 1, marginHorizontal: 16, paddingVertical: 0 },

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import TabTip from "@/components/TabTip";
 import { useBucketList } from "@/context/BucketListContext";
 import { useTravel } from "@/context/TravelContext";
 import { WORLD_COUNTRIES } from "@/data/worldCountries";
@@ -184,6 +185,13 @@ export default function BucketTab() {
           · shown on world map
         </Text>
       </View>
+
+      <TabTip
+        id="bucket"
+        icon="flag-outline"
+        title="Plan where to go next"
+        text="Search any country and tap it to add it to your bucket list. Your picks show up on the world map so you can see what's left to explore."
+      />
 
       <FlatList
         data={listData}
