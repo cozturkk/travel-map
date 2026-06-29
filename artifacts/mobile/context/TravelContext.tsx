@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { Platform } from "react-native";
+import { MAJOR_CITIES, ROLLUP_RADIUS_KM } from "@/data/majorCities";
 
 // Only import native-only modules on native platforms
 const MediaLibrary =
@@ -69,7 +70,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v9";
+const CACHE_KEY = "travel_data_v10";
 
 // Lookup: well-known sub-city localities → parent city name.
 // Covers London boroughs, NYC boroughs, Tokyo special wards, Paris arrondissements.
@@ -101,6 +102,36 @@ const BOROUGH_TO_CITY: Record<string, string> = {
   katsushika: "Tokyo", edogawa: "Tokyo", ota: "Tokyo",
   nakano: "Tokyo", bunkyo: "Tokyo",
 };
+
+// Haversine great-circle distance in km.
+function distKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Roll a precise GPS point UP to the nearest major metro within ROLLUP_RADIUS_KM.
+// This turns neighborhoods / boroughs / suburbs / small towns into their parent
+// city (e.g. Camden, a Barcelona suburb, an Istanbul district) — generically,
+// using the photo's own coordinates. Returns null when no metro is close enough
+// (genuinely remote/rural spots keep their reverse-geocoded name).
+function nearestMajorCity(lat: number, lon: number): string | null {
+  let best: string | null = null;
+  let bestKm = ROLLUP_RADIUS_KM;
+  for (const c of MAJOR_CITIES) {
+    const km = distKm(lat, lon, c.lat, c.lon);
+    if (km < bestKm) {
+      bestKm = km;
+      best = c.name;
+    }
+  }
+  return best;
+}
 
 function resolveCity(
   city: string | null | undefined,
@@ -361,7 +392,11 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           );
           if (results[0]) {
             const { country, city, region, subregion } = results[0];
-            const cityName = resolveCity(city, subregion, region);
+            // Parent-city rollup: snap GPS to nearest metro first (handles
+            // suburbs/boroughs/towns everywhere), then fall back to the
+            // reverse-geocoded locality for remote areas.
+            const cityName =
+              nearestMajorCity(lat, lon) ?? resolveCity(city, subregion, region);
             bucketPhotos.forEach((p) => {
               p.country = country ?? undefined;
               p.city = cityName;
