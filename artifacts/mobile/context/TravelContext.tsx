@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 import { Platform } from "react-native";
-import { MAJOR_CITIES, ROLLUP_RADIUS_KM } from "@/data/majorCities";
+import { WORLD_CITIES, ROLLUP_RADIUS_KM } from "@/data/worldCities";
 
 // Only import native-only modules on native platforms
 const MediaLibrary =
@@ -70,7 +70,7 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-const CACHE_KEY = "travel_data_v10";
+const CACHE_KEY = "travel_data_v11";
 
 // Lookup: well-known sub-city localities → parent city name.
 // Covers London boroughs, NYC boroughs, Tokyo special wards, Paris arrondissements.
@@ -115,22 +115,28 @@ function distKm(lat1: number, lon1: number, lat2: number, lon2: number): number 
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Roll a precise GPS point UP to the nearest major metro within ROLLUP_RADIUS_KM.
-// This turns neighborhoods / boroughs / suburbs / small towns into their parent
-// city (e.g. Camden, a Barcelona suburb, an Istanbul district) — generically,
-// using the photo's own coordinates. Returns null when no metro is close enough
-// (genuinely remote/rural spots keep their reverse-geocoded name).
+// Roll a precise GPS point UP to its parent city using a worldwide city list.
+// WORLD_CITIES is sorted by population (descending), so the FIRST city found
+// within ROLLUP_RADIUS_KM is the most populous nearby place i.e. the metro
+// anchor. This turns neighborhoods / boroughs / suburbs / districts into their
+// parent city generically from the photo's own coordinates:
+//   - Camden -> London, Brooklyn -> New York, Sahinbey -> Gaziantep
+// while keeping adjacent major cities separate (Yokohama sits ~28km from Tokyo,
+// outside the radius, so it stays Yokohama). Returns null when nothing is close
+// enough, so genuinely remote/rural spots keep their reverse-geocoded name.
+const ROLLUP_DEG = ROLLUP_RADIUS_KM / 111 + 0.05; // bounding-box prefilter (deg)
 function nearestMajorCity(lat: number, lon: number): string | null {
-  let best: string | null = null;
-  let bestKm = ROLLUP_RADIUS_KM;
-  for (const c of MAJOR_CITIES) {
-    const km = distKm(lat, lon, c.lat, c.lon);
-    if (km < bestKm) {
-      bestKm = km;
-      best = c.name;
+  for (const c of WORLD_CITIES) {
+    const cLat = c[1];
+    const cLon = c[2];
+    if (Math.abs(cLat - lat) > ROLLUP_DEG || Math.abs(cLon - lon) > ROLLUP_DEG) {
+      continue;
+    }
+    if (distKm(lat, lon, cLat, cLon) <= ROLLUP_RADIUS_KM) {
+      return c[0]; // first hit = most populous within radius (list is pop-sorted)
     }
   }
-  return best;
+  return null;
 }
 
 function resolveCity(
