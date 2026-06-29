@@ -1,4 +1,4 @@
-import { type Session, type User } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
 import React, {
   createContext,
   useCallback,
