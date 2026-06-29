@@ -19,7 +19,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import TabTip from "@/components/TabTip";
 import { useTravel } from "@/context/TravelContext";
 import {
   Destination,
@@ -318,12 +317,6 @@ export default function InspireTab() {
           </Text>
         </View>
 
-        <TabTip
-          id="inspire"
-          icon="sparkles-outline"
-          title="Get personalized ideas"
-          text="Pick a vibe, the month you'll travel, and how far you'll fly. We'll suggest destinations that fit — minus the ones you've already been to."
-        />
 
         {!results && !loading && (
           <Animated.View entering={FadeIn} exiting={FadeOut}>

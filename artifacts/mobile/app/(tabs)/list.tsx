@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -18,11 +18,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import TabTip from "@/components/TabTip";
 import { CityVisit, CountryVisit, PhotoAsset, useTravel } from "@/context/TravelContext";
 import { useHomeCity } from "@/context/HomeCityContext";
 import { countryToFlag } from "@/utils/countryFlags";
 import PermissionGate from "@/components/PermissionGate";
+
+const MediaLibrary =
+  Platform.OS !== "web"
+    ? (require("expo-media-library") as typeof import("expo-media-library"))
+    : null;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -109,14 +113,47 @@ function TripSummaryBar({ countries, photos }: { countries: CountryVisit[]; phot
 
 // ─── Photo Strip ─────────────────────────────────────────────────────────────
 
-function PhotoStrip({ uris, onPress }: { uris: string[]; onPress: (i: number) => void }) {
+// A single thumbnail that recovers from a missing/stale URI by re-resolving a
+// fresh local file path from the photo library (handles iCloud-optimized and
+// expired temp-file cases where the cached URI no longer loads).
+function Thumb({ uri, id, idx, onPress }: { uri: string; id?: string; idx: number; onPress: (i: number) => void }) {
+  const [src, setSrc] = useState(uri);
+  const [failed, setFailed] = useState(false);
+  const triedRef = React.useRef(false);
+  useEffect(() => { setSrc(uri); setFailed(false); triedRef.current = false; }, [uri]);
+  const handleError = useCallback(() => {
+    if (!triedRef.current && id && MediaLibrary) {
+      triedRef.current = true;
+      MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true })
+        .then((info: any) => {
+          const fresh = info && info.localUri;
+          if (fresh && fresh !== src) { setSrc(fresh); setFailed(false); }
+          else setFailed(true);
+        })
+        .catch(() => setFailed(true));
+    } else {
+      setFailed(true);
+    }
+  }, [id, src]);
+  return (
+    <TouchableOpacity activeOpacity={0.8} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(idx); }}>
+      {failed ? (
+        <View style={[styles.thumb, styles.thumbFallback]}>
+          <Ionicons name="image-outline" size={20} color="rgba(148,163,184,0.7)" />
+        </View>
+      ) : (
+        <Image source={{ uri: src }} style={styles.thumb} onError={handleError} />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+function PhotoStrip({ uris, ids, onPress }: { uris: string[]; ids?: string[]; onPress: (i: number) => void }) {
   if (uris.length === 0) return null;
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
       {uris.map((uri, idx) => (
-        <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(idx); }}>
-          <Image source={{ uri }} style={styles.thumb} />
-        </TouchableOpacity>
+        <Thumb key={idx} uri={uri} id={ids ? ids[idx] : undefined} idx={idx} onPress={onPress} />
       ))}
     </ScrollView>
   );
@@ -133,6 +170,7 @@ function HomeCountryCard({
 }) {
   const colors = useColors();
   const allUris = countryVisit.cities.flatMap((ci) => ci.photoUris ?? []);
+  const allIds = countryVisit.cities.flatMap((ci) => ci.photoIds ?? []);
   return (
     <View style={[styles.homeCityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.homeCityCardHeader}>
@@ -151,6 +189,7 @@ function HomeCountryCard({
       </View>
       <PhotoStrip
         uris={allUris}
+        ids={allIds}
         onPress={(idx) => onPhotoPress(allUris, idx)}
       />
       <Text style={[styles.homeCityNote, { color: colors.mutedForeground }]}>
@@ -196,6 +235,7 @@ function ChronoCityItem({
       </View>
       <PhotoStrip
         uris={item.photoUris ?? []}
+        ids={item.photoIds ?? []}
         onPress={(idx) => onPhotoPress(item.photoUris ?? [], idx)}
       />
     </View>
@@ -331,12 +371,6 @@ export default function ListTab() {
         }
         ListHeaderComponent={
           <View style={{ paddingBottom: 4 }}>
-            <TabTip
-              id="trips"
-              icon="images-outline"
-              title="Build your travel history"
-              text="Add your photos and we'll map every city you've visited automatically. Tap “Add more photos” anytime to include new ones."
-            />
             <TripSummaryBar countries={tripCountries} photos={tripPhotos} />
 
             <TouchableOpacity
@@ -437,4 +471,5 @@ const styles = StyleSheet.create({
 
   photoStrip: { paddingHorizontal: 4, paddingBottom: 10, gap: 6 },
   thumb: { width: 64, height: 64, borderRadius: 8 },
+  thumbFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "rgba(148,163,184,0.12)" },
 });

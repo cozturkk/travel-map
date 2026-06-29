@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   Platform,
@@ -14,14 +13,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import TabTip from "@/components/TabTip";
 import { useHomeCity } from "@/context/HomeCityContext";
 import { useTravel } from "@/context/TravelContext";
-import { useBucketList } from "@/context/BucketListContext";
-import { useAuth, type BackupData } from "@/context/AuthContext";
 import { countryToFlag } from "@/utils/countryFlags";
 
 interface CountryOption {
@@ -125,240 +120,6 @@ function CountryPickerModal({
   );
 }
 
-const MANUAL_VISITED_KEY = "manual_visited_v1";
-
-function AccountSection() {
-  const colors = useColors();
-  const { configured, initializing, user, signIn, signUp, signOut, backup, restore } =
-    useAuth();
-  const { homeCity, setHomeCity } = useHomeCity();
-  const { bucketList, addToBucket } = useBucketList();
-  const { countries } = useTravel();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [lastSync, setLastSync] = useState<string | null>(null);
-
-  const cardStyle = [styles.section, { backgroundColor: colors.card, borderColor: colors.border }];
-
-  if (!configured) {
-    return (
-      <View style={cardStyle}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cloud-offline-outline" size={18} color={colors.mutedForeground} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Cloud Sync</Text>
-        </View>
-        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Sign-in and backup are built in, but need a free Supabase project to store your
-          data. Add your project URL and anon key (EXPO_PUBLIC_SUPABASE_URL and
-          EXPO_PUBLIC_SUPABASE_ANON_KEY) to turn this on.
-        </Text>
-      </View>
-    );
-  }
-
-  if (initializing) {
-    return (
-      <View style={[...cardStyle, { alignItems: "center" }]}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
-  }
-
-  async function buildPayload(): Promise<BackupData> {
-    let manuallyVisited: string[] = [];
-    try {
-      const raw = await AsyncStorage.getItem(MANUAL_VISITED_KEY);
-      if (raw) manuallyVisited = JSON.parse(raw);
-    } catch {}
-    const cityCount = countries.reduce((n, c) => n + c.cities.length, 0);
-    return {
-      manuallyVisited,
-      bucketList,
-      homeCountry: homeCity?.country ?? null,
-      stats: { countries: countries.length, cities: cityCount },
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  async function handleAuth() {
-    if (!email.trim() || password.length < 6) {
-      setMsg("Enter an email and a password of at least 6 characters.");
-      return;
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setBusy(true);
-    setMsg(null);
-    const res =
-      mode === "signup"
-        ? await signUp(email, password)
-        : await signIn(email, password);
-    setBusy(false);
-    if (res.error) {
-      setMsg(res.error);
-      return;
-    }
-    if (res.needsConfirmation) {
-      setMsg("Check your email to confirm your account, then sign in.");
-      return;
-    }
-    setPassword("");
-    setMsg(null);
-  }
-
-  async function handleBackup() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setBusy(true);
-    setMsg(null);
-    const payload = await buildPayload();
-    const { error } = await backup(payload);
-    setBusy(false);
-    if (error) {
-      setMsg(error);
-    } else {
-      setLastSync(new Date().toLocaleString());
-      setMsg("Backed up \u2713");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }
-
-  async function handleRestore() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setBusy(true);
-    setMsg(null);
-    const { data, error } = await restore();
-    setBusy(false);
-    if (error) {
-      setMsg(error);
-      return;
-    }
-    if (!data) {
-      setMsg("No backup found yet \u2014 tap \u201CBack up now\u201D first.");
-      return;
-    }
-    try {
-      await AsyncStorage.setItem(
-        MANUAL_VISITED_KEY,
-        JSON.stringify(data.manuallyVisited ?? [])
-      );
-    } catch {}
-    if (data.homeCountry) await setHomeCity({ country: data.homeCountry });
-    (data.bucketList ?? []).forEach((c) => addToBucket(c));
-    setMsg("Restored \u2713 \u2014 reopen the Map tab to see your countries.");
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
-  if (user) {
-    return (
-      <View style={cardStyle}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cloud-done-outline" size={18} color={colors.accent} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Cloud Account</Text>
-        </View>
-        <View style={[styles.accountRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <Ionicons name="person-circle-outline" size={22} color={colors.primary} />
-          <Text style={[styles.accountEmail, { color: colors.foreground }]} numberOfLines={1}>
-            {user.email}
-          </Text>
-        </View>
-        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Back up your home country, bucket list and map selections so they survive a
-          reinstall or a move to a new phone.
-        </Text>
-        <View style={styles.homeActions}>
-          <TouchableOpacity
-            onPress={handleBackup}
-            disabled={busy}
-            style={[styles.actionBtn, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
-          >
-            <Text style={[styles.actionBtnText, { color: colors.primary }]}>Back up now</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleRestore}
-            disabled={busy}
-            style={[styles.actionBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
-          >
-            <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Restore</Text>
-          </TouchableOpacity>
-        </View>
-        {busy && <ActivityIndicator color={colors.accent} />}
-        {lastSync && (
-          <Text style={[styles.syncNote, { color: colors.mutedForeground }]}>
-            Last backup: {lastSync}
-          </Text>
-        )}
-        {msg && (
-          <Text style={[styles.syncNote, { color: colors.accent }]}>{msg}</Text>
-        )}
-        <TouchableOpacity onPress={async () => { await signOut(); setMsg(null); }} style={styles.signOutBtn}>
-          <Ionicons name="log-out-outline" size={16} color={colors.destructive} />
-          <Text style={[styles.signOutText, { color: colors.destructive }]}>Sign out</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View style={cardStyle}>
-      <View style={styles.sectionHeader}>
-        <Ionicons name="cloud-upload-outline" size={18} color={colors.accent} />
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-          {mode === "signup" ? "Create account" : "Sign in"}
-        </Text>
-      </View>
-      <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-        Keep your travel stats backed up and synced across your devices.
-      </Text>
-      <TextInput
-        style={[styles.authInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
-        placeholder="Email"
-        placeholderTextColor={colors.mutedForeground}
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        autoCorrect={false}
-      />
-      <TextInput
-        style={[styles.authInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
-        placeholder="Password"
-        placeholderTextColor={colors.mutedForeground}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-      />
-      {msg && <Text style={[styles.syncNote, { color: colors.accent }]}>{msg}</Text>}
-      <TouchableOpacity
-        onPress={handleAuth}
-        disabled={busy}
-        style={[styles.setHomeBtn, { backgroundColor: colors.accent, opacity: busy ? 0.7 : 1 }]}
-        activeOpacity={0.85}
-      >
-        {busy ? (
-          <ActivityIndicator color={colors.accentForeground} />
-        ) : (
-          <Text style={[styles.setHomeText, { color: colors.accentForeground }]}>
-            {mode === "signup" ? "Create account" : "Sign in"}
-          </Text>
-        )}
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => { setMode(mode === "signup" ? "signin" : "signup"); setMsg(null); }}
-        style={{ alignSelf: "center" }}
-      >
-        <Text style={[styles.switchText, { color: colors.primary }]}>
-          {mode === "signup"
-            ? "Already have an account? Sign in"
-            : "New here? Create an account"}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
 
 export default function ProfileTab() {
   const colors = useColors();
@@ -403,12 +164,6 @@ export default function ProfileTab() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <TabTip
-          id="profile"
-          icon="cloud-upload-outline"
-          title="Keep your stats safe"
-          text="Set your home country, then sign in to back up your travel stats to the cloud and sync them across devices."
-        />
 
         {/* Home country section */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -460,8 +215,6 @@ export default function ProfileTab() {
           )}
         </View>
 
-        {/* Cloud account / sync */}
-        <AccountSection />
 
         {/* Info card */}
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>

@@ -40,6 +40,8 @@ export interface CityVisit {
   lastDate: number;
   previewUri: string;
   photoUris: string[];
+  previewId: string;
+  photoIds: string[];
 }
 
 export interface CountryVisit {
@@ -256,6 +258,8 @@ function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
         lastDate,
         previewUri: sortedByTime[0].uri,
         photoUris: sortedByTime.slice(0, 10).map((p) => p.uri),
+        previewId: sortedByTime[0].id,
+        photoIds: sortedByTime.slice(0, 10).map((p) => p.id),
       });
     }
 

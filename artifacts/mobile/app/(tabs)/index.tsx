@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Easing,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -31,7 +32,6 @@ import { useColors } from "@/hooks/useColors";
 import { CountryVisit, useTravel } from "@/context/TravelContext";
 import { useBucketList } from "@/context/BucketListContext";
 import PermissionGate from "@/components/PermissionGate";
-import TabTip from "@/components/TabTip";
 import ShareCard, { ShareStats } from "@/components/ShareCard";
 import { buildMonthMap, calcStreaks } from "@/utils/travelStats";
 import { WORLD_COUNTRIES } from "@/data/worldCountries";
@@ -124,8 +124,9 @@ function resizeGlobe(){
   proj.scale(scaleR).translate([W/2,H/2]);
   draw();
 }
-var _rzT;
-window.addEventListener('resize',function(){clearTimeout(_rzT);_rzT=setTimeout(resizeGlobe,50);});
+var _rzP=false;
+function _onResize(){if(_rzP)return;_rzP=true;requestAnimationFrame(function(){_rzP=false;resizeGlobe();});}
+window.addEventListener('resize',_onResize);
 
 function isOnFront(lng,lat){
   var p1=lat*Math.PI/180,L1=lng*Math.PI/180;
@@ -451,14 +452,13 @@ export default function MapTab() {
     outputRange: [GLOBE_H, GLOBE_MIN],
   });
   const snapTo = useCallback((to: 0 | 1) => {
-    sendToMap({ type: "resize" });
-    Animated.spring(sheet, {
+    setExpanded(to === 1);
+    Animated.timing(sheet, {
       toValue: to,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
-      bounciness: 2,
-      speed: 12,
     }).start(() => {
-      setExpanded(to === 1);
       sendToMap({ type: "resize" });
     });
   }, [sheet, sendToMap]);
@@ -661,12 +661,6 @@ export default function MapTab() {
             </TouchableOpacity>
           </View>
         </View>
-        <TabTip
-          id="map"
-          icon="hand-left-outline"
-          title="Mark where you've been"
-          text="Tap any country on the globe to mark it visited, or use the + button at the top. Pull this panel up for the full stats view."
-        />
         <ScrollView
           style={[styles.panel, { backgroundColor: colors.background }]}
           contentContainerStyle={[styles.panelContent, { paddingBottom: insets.bottom + 88 }]}
