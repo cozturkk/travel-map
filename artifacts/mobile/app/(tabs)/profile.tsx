@@ -134,7 +134,7 @@ const PREMIUM_FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; d
   {
     icon: "images-outline",
     title: "Scan your entire photo library",
-    desc: `The free plan scans your ${FREE_PHOTO_LIMIT} most recent photos. Premium walks through everything — even 60,000+ photos — to rebuild your full travel history.`,
+    desc: `On the free plan you hand-pick which photos count (up to ${FREE_PHOTO_LIMIT}) with the iOS photo selector. Premium scans everything automatically — even 60,000+ photos.`,
   },
   {
     icon: "cloud-done-outline",

@@ -30,6 +30,10 @@ export default function PermissionGate() {
         Travel Map reads GPS metadata from your photos to automatically build
         your personal travel history. No photos leave your device.
       </Text>
+      <Text style={[styles.tierNote, { color: colors.mutedForeground }]}>
+        Free plan: choose “Select Photos…” and hand-pick the trips you want
+        (up to 500 photos). Premium scans your entire library automatically.
+      </Text>
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colors.primary }]}
         onPress={() => {
@@ -76,6 +80,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "center",
     lineHeight: 24,
+  },
+  tierNote: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+    lineHeight: 19,
+    opacity: 0.9,
   },
   button: {
     flexDirection: "row",

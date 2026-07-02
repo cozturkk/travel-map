@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { CityVisit, CountryVisit, PhotoAsset, useTravel } from "@/context/TravelContext";
 import { useHomeCity } from "@/context/HomeCityContext";
+import { usePremium } from "@/context/PremiumContext";
 import { countryToFlag } from "@/utils/countryFlags";
 import PermissionGate from "@/components/PermissionGate";
 
@@ -270,6 +271,7 @@ export default function ListTab() {
   const insets = useSafeAreaInsets();
   const { permissionGranted, isLoading, progress, countries, photos, refresh, addMorePhotos, accessPrivileges } = useTravel();
   const { homeCity } = useHomeCity();
+  const { isPremium } = usePremium();
 
   const [viewerState, setViewerState] = useState<{ uris: string[]; index: number } | null>(null);
   const openViewer = useCallback((uris: string[], index: number) => {
@@ -390,11 +392,15 @@ export default function ListTab() {
               <Text style={[styles.addPhotosText, { color: colors.foreground }]}>
                 Add more photos
               </Text>
-              {accessPrivileges === "limited" && (
+              {accessPrivileges === "limited" ? (
                 <Text style={[styles.addPhotosHint, { color: colors.mutedForeground }]}>
-                  limited access
+                  you choose the photos
                 </Text>
-              )}
+              ) : isPremium !== true ? (
+                <Text style={[styles.addPhotosHint, { color: colors.mutedForeground }]}>
+                  free plan · up to 500
+                </Text>
+              ) : null}
             </TouchableOpacity>
 
             {homeCountryVisit && (
