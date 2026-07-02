@@ -690,7 +690,6 @@ export default function MapTab() {
             value={`${pct}%`}
             label="of the world"
             icon="🌍"
-            iconSize={54}
             bg="#7C2D12"
           />
         </View>

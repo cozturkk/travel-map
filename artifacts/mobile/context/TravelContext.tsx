@@ -77,8 +77,8 @@ interface TravelContextType {
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-// v12: permanent cache (scan once, top up silently) + admin-region city rollup
-const CACHE_KEY = "travel_data_v12";
+// v13: metro-dominance city rollup (Esenyurt/Silivri -> Istanbul)
+const CACHE_KEY = "travel_data_v13";
 const EXCLUDED_KEY = "excluded_photos_v1";
 
 // Lookup: well-known sub-city localities → parent city name.
@@ -124,28 +124,49 @@ function distKm(lat1: number, lon1: number, lat2: number, lon2: number): number 
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Roll a precise GPS point UP to its parent city using a worldwide city list.
-// WORLD_CITIES is sorted by population (descending), so the FIRST city found
-// within ROLLUP_RADIUS_KM is the most populous nearby place i.e. the metro
-// anchor. This turns neighborhoods / boroughs / suburbs / districts into their
-// parent city generically from the photo's own coordinates:
-//   - Camden -> London, Brooklyn -> New York, Sahinbey -> Gaziantep
-// while keeping adjacent major cities separate (Yokohama sits ~28km from Tokyo,
-// outside the radius, so it stays Yokohama). Returns null when nothing is close
-// enough, so genuinely remote/rural spots keep their reverse-geocoded name.
-const ROLLUP_DEG = ROLLUP_RADIUS_KM / 111 + 0.05; // bounding-box prefilter (deg)
+// Roll a precise GPS point UP to the city a traveller would actually name,
+// using a worldwide population-ranked city list and a dominance rule:
+//
+//  1. "local"  = the most populous city within ROLLUP_RADIUS_KM (25km).
+//     This alone turns neighborhoods / boroughs / suburbs into their metro
+//     (Camden -> London, Brooklyn -> New York, Sahinbey -> Gaziantep).
+//  2. "metro"  = the most populous 1M+ city whose own catchment covers the
+//     point. A metro's catchment scales with its size (popK/200, clamped to
+//     30-80km): Istanbul (14.8M) reaches ~74km, London (7.6M) ~38km.
+//  3. The metro replaces the local answer only when it DOMINATES it, i.e. is
+//     at least 10x more populous. So Esenyurt (211k) and Silivri (53k) roll
+//     up to Istanbul, but Yokohama (3.6M) is never swallowed by Tokyo (8.3M),
+//     and Reading (318k, 60km out) stays outside London's 38km reach.
+//
+// Works purely from coordinates, so it does not depend on how the reverse
+// geocoder happens to label towns or provinces. Returns null when nothing is
+// close, so genuinely remote spots keep their reverse-geocoded name.
+const METRO_MIN_POP_K = 1000;
+const METRO_MAX_RADIUS_KM = 80;
+const METRO_DOMINANCE = 10;
+function metroCatchmentKm(popK: number): number {
+  return Math.min(METRO_MAX_RADIUS_KM, Math.max(30, popK / 200));
+}
 function nearestMajorCity(lat: number, lon: number): string | null {
+  // Bounding-box prefilter sized for the widest catchment; the longitude
+  // window widens with latitude (a degree of longitude shrinks toward poles).
+  const latWin = METRO_MAX_RADIUS_KM / 111 + 0.05;
+  const lonWin =
+    METRO_MAX_RADIUS_KM /
+      (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180))) +
+    0.05;
+  let local: WorldCity | null = null;
+  let metro: WorldCity | null = null;
   for (const c of WORLD_CITIES) {
-    const cLat = c[1];
-    const cLon = c[2];
-    if (Math.abs(cLat - lat) > ROLLUP_DEG || Math.abs(cLon - lon) > ROLLUP_DEG) {
-      continue;
-    }
-    if (distKm(lat, lon, cLat, cLon) <= ROLLUP_RADIUS_KM) {
-      return c[0]; // first hit = most populous within radius (list is pop-sorted)
-    }
+    if (Math.abs(c[1] - lat) > latWin || Math.abs(c[2] - lon) > lonWin) continue;
+    const d = distKm(lat, lon, c[1], c[2]);
+    // list is pop-sorted, so the first hit in each slot is the most populous
+    if (!local && d <= ROLLUP_RADIUS_KM) local = c;
+    if (!metro && c[3] >= METRO_MIN_POP_K && d <= metroCatchmentKm(c[3])) metro = c;
+    if (local && metro) break;
   }
-  return null;
+  if (metro && (!local || metro[3] >= METRO_DOMINANCE * local[3])) return metro[0];
+  return local ? local[0] : null;
 }
 
 // Admin-region rollup: many provinces are named after their metro (İstanbul,
@@ -224,8 +245,8 @@ const BATCH_SIZE = 20;
 // cached across rescans. This makes a full-library rescan cheap (the expensive
 // geocoding step only runs for never-seen location buckets) and avoids
 // hammering Apple's rate-limited geocoder on big libraries.
-// v2: results now include the admin-region rollup.
-const GEO_CACHE_KEY = "geo_cache_v2";
+// v3: results now use the metro-dominance rollup.
+const GEO_CACHE_KEY = "geo_cache_v3";
 type GeoCacheEntry = { country?: string; city?: string; region?: string };
 
 // Parse the TRUE capture time of a photo.
