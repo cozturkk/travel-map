@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import { WORLD_CITIES, ROLLUP_RADIUS_KM } from "@/data/worldCities";
+import { FREE_PHOTO_LIMIT, readPremiumFlag } from "@/context/PremiumContext";
 
 // Only import native-only modules on native platforms
 const MediaLibrary =
@@ -176,8 +177,18 @@ function resolveCity(
   // 5. Default: locality → fall back to cleaned subregion or region
   return city ?? cleanSub ?? region ?? undefined;
 }
-const MAX_PHOTOS = 2000;
+// Photos are fetched in pages so a 60k+ library never has to come back in one
+// call. Free tier stops at FREE_PHOTO_LIMIT (most recent first); Premium walks
+// the whole library.
+const PAGE_SIZE = 1000;
 const BATCH_SIZE = 20;
+
+// Reverse-geocode results are permanent facts about coordinates, so they are
+// cached across rescans. This makes a full-library rescan cheap (the expensive
+// geocoding step only runs for never-seen location buckets) and avoids
+// hammering Apple's rate-limited geocoder on big libraries.
+const GEO_CACHE_KEY = "geo_cache_v1";
+type GeoCacheEntry = { country?: string; city?: string; region?: string };
 
 // Parse the TRUE capture time of a photo.
 // iOS MediaLibrary `creationTime` is often the date the asset was *added* to the
@@ -347,11 +358,36 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     try {
       setProgress({ current: 0, total: 1, stage: "Loading photo library..." });
 
-      const { assets } = await MediaLibrary.getAssetsAsync({
-        mediaType: MediaLibrary.MediaType.photo,
-        first: MAX_PHOTOS,
-        sortBy: [MediaLibrary.SortBy.creationTime],
-      });
+      const premium = await readPremiumFlag();
+      const limit = premium ? Number.POSITIVE_INFINITY : FREE_PHOTO_LIMIT;
+
+      // Page through the library (newest first) instead of one giant request,
+      // so premium users with 60k+ photos can be scanned safely.
+      const assets: import("expo-media-library").Asset[] = [];
+      let cursor: string | undefined;
+      for (;;) {
+        const page = await MediaLibrary.getAssetsAsync({
+          mediaType: MediaLibrary.MediaType.photo,
+          first: Math.min(PAGE_SIZE, limit - assets.length),
+          after: cursor,
+          sortBy: [MediaLibrary.SortBy.creationTime],
+        });
+        assets.push(...page.assets);
+        setProgress({
+          current: assets.length,
+          total: Math.min(limit, page.totalCount ?? assets.length),
+          stage: "Loading photo library...",
+        });
+        if (
+          assets.length >= limit ||
+          !page.hasNextPage ||
+          !page.endCursor ||
+          page.assets.length === 0
+        ) {
+          break;
+        }
+        cursor = page.endCursor;
+      }
 
       setProgress({
         current: 0,
@@ -402,9 +438,39 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
         stage: "Identifying locations...",
       });
 
+      // Load the persistent geocode cache — hits skip the network entirely.
+      let geoCache: Record<string, GeoCacheEntry> = {};
+      try {
+        const rawCache = await AsyncStorage.getItem(GEO_CACHE_KEY);
+        if (rawCache) geoCache = JSON.parse(rawCache);
+      } catch {}
+      const saveGeoCache = async () => {
+        try {
+          await AsyncStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache));
+        } catch {}
+      };
+
       let geocodedCount = 0;
+      let newSinceSave = 0;
       for (const [key, bucketPhotos] of locationBuckets) {
         const [lat, lon] = key.split(",").map(Number);
+        const cached = geoCache[key];
+        if (cached) {
+          bucketPhotos.forEach((p) => {
+            p.country = cached.country;
+            p.city = cached.city;
+            p.region = cached.region;
+          });
+          geocodedCount++;
+          if (geocodedCount % 50 === 0) {
+            setProgress({
+              current: geocodedCount,
+              total: locationBuckets.size,
+              stage: "Identifying locations...",
+            });
+          }
+          continue;
+        }
         try {
           // Race each lookup against a timeout so one hung/rate-limited
           // reverse-geocode can't stall the whole load (the cause of the
@@ -427,6 +493,16 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
               p.city = cityName;
               p.region = region ?? undefined;
             });
+            geoCache[key] = {
+              country: country ?? undefined,
+              city: cityName,
+              region: region ?? undefined,
+            };
+            newSinceSave++;
+            if (newSinceSave >= 25) {
+              newSinceSave = 0;
+              await saveGeoCache();
+            }
           }
         } catch {}
 
@@ -438,6 +514,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
         });
         await new Promise((r) => setTimeout(r, 30));
       }
+      if (newSinceSave > 0) await saveGeoCache();
 
       const processedPhotos = rawPhotos;
       const countryTree = buildCountryTree(processedPhotos);

@@ -1,7 +1,10 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -15,7 +18,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useAuth, type BackupData } from "@/context/AuthContext";
+import { useBucketList } from "@/context/BucketListContext";
 import { useHomeCity } from "@/context/HomeCityContext";
+import { FREE_PHOTO_LIMIT, usePremium } from "@/context/PremiumContext";
 import { useTravel } from "@/context/TravelContext";
 import { countryToFlag } from "@/utils/countryFlags";
 
@@ -23,6 +29,8 @@ interface CountryOption {
   country: string;
   photoCount: number;
 }
+
+const MANUAL_VISITED_KEY = "manual_visited_v1";
 
 function CountryPickerModal({
   visible,
@@ -120,12 +128,355 @@ function CountryPickerModal({
   );
 }
 
+// ─── Premium ─────────────────────────────────────────────────────────────────
+
+const PREMIUM_FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; desc: string }[] = [
+  {
+    icon: "images-outline",
+    title: "Scan your entire photo library",
+    desc: `The free plan scans your ${FREE_PHOTO_LIMIT} most recent photos. Premium walks through everything — even 60,000+ photos — to rebuild your full travel history.`,
+  },
+  {
+    icon: "cloud-done-outline",
+    title: "Account & cloud backup",
+    desc: "Sign in to back up your map selections, bucket list and home country, and restore them on any phone.",
+  },
+];
+
+function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
+  const colors = useColors();
+  const { isPremium, unlock, deactivate } = usePremium();
+
+  if (isPremium === null) return null;
+
+  if (isPremium) {
+    return (
+      <View style={[styles.section, styles.premiumActiveCard, { backgroundColor: colors.card }]}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.premiumBadge}>
+            <Ionicons name="star" size={13} color="#0F172A" />
+            <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+          </View>
+          <Text style={[styles.premiumActiveText, { color: colors.mutedForeground }]}>active</Text>
+        </View>
+        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
+          Full-library scanning and cloud backup are unlocked. Thanks for supporting Travel Map!
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(
+              "Deactivate Premium?",
+              "This is a preview control — it just relocks the premium features on this device.",
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Deactivate", style: "destructive", onPress: () => deactivate() },
+              ]
+            );
+          }}
+          style={{ alignSelf: "center", paddingVertical: 4 }}
+        >
+          <Text style={[styles.switchText, { color: colors.mutedForeground }]}>
+            Deactivate (preview)
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.section, styles.premiumPitchCard, { backgroundColor: colors.card }]}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.premiumBadge}>
+          <Ionicons name="star" size={13} color="#0F172A" />
+          <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+        </View>
+      </View>
+      {PREMIUM_FEATURES.map((f) => (
+        <View key={f.title} style={styles.premiumFeatureRow}>
+          <View style={[styles.premiumFeatureIcon, { backgroundColor: "#F59E0B22" }]}>
+            <Ionicons name={f.icon} size={18} color="#F59E0B" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.premiumFeatureTitle, { color: colors.foreground }]}>{f.title}</Text>
+            <Text style={[styles.premiumFeatureDesc, { color: colors.mutedForeground }]}>{f.desc}</Text>
+          </View>
+        </View>
+      ))}
+      <TouchableOpacity
+        onPress={async () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await unlock();
+          onUpgraded();
+        }}
+        style={styles.premiumUpgradeBtn}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="star" size={17} color="#0F172A" />
+        <Text style={styles.premiumUpgradeText}>Unlock Premium</Text>
+      </TouchableOpacity>
+      <Text style={[styles.premiumFootnote, { color: colors.mutedForeground }]}>
+        Preview unlock — App Store purchases are wired in before release.
+      </Text>
+    </View>
+  );
+}
+
+// ─── Cloud account (premium) ─────────────────────────────────────────────────
+
+function AccountSection() {
+  const colors = useColors();
+  const { isPremium } = usePremium();
+  const { configured, initializing, user, signIn, signUp, signOut, backup, restore } =
+    useAuth();
+  const { homeCity, setHomeCity } = useHomeCity();
+  const { bucketList, addToBucket } = useBucketList();
+  const { countries } = useTravel();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const cardStyle = [styles.section, { backgroundColor: colors.card, borderColor: colors.border }];
+
+  if (isPremium !== true) {
+    return (
+      <View style={cardStyle}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} />
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
+        </View>
+        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
+          Sign in to record your travels in the cloud and restore them on any phone.
+          This is a Premium feature — unlock it above.
+        </Text>
+      </View>
+    );
+  }
+
+  if (!configured) {
+    return (
+      <View style={cardStyle}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="cloud-offline-outline" size={18} color={colors.mutedForeground} />
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
+        </View>
+        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
+          Sign-in and backup are built in, but need a free Supabase project to store your
+          data. Add your project URL and anon key (EXPO_PUBLIC_SUPABASE_URL and
+          EXPO_PUBLIC_SUPABASE_ANON_KEY) to turn this on.
+        </Text>
+      </View>
+    );
+  }
+
+  if (initializing) {
+    return (
+      <View style={[...cardStyle, { alignItems: "center" }]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  async function buildPayload(): Promise<BackupData> {
+    let manuallyVisited: string[] = [];
+    try {
+      const raw = await AsyncStorage.getItem(MANUAL_VISITED_KEY);
+      if (raw) manuallyVisited = JSON.parse(raw);
+    } catch {}
+    const cityCount = countries.reduce((n, c) => n + c.cities.length, 0);
+    return {
+      manuallyVisited,
+      bucketList,
+      homeCountry: homeCity?.country ?? null,
+      stats: { countries: countries.length, cities: cityCount },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  async function handleAuth() {
+    if (!email.trim() || password.length < 6) {
+      setMsg("Enter an email and a password of at least 6 characters.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBusy(true);
+    setMsg(null);
+    const res =
+      mode === "signup"
+        ? await signUp(email, password)
+        : await signIn(email, password);
+    setBusy(false);
+    if (res.error) {
+      setMsg(res.error);
+      return;
+    }
+    if (res.needsConfirmation) {
+      setMsg("Check your email to confirm your account, then sign in.");
+      return;
+    }
+    setPassword("");
+    setMsg(null);
+  }
+
+  async function handleBackup() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBusy(true);
+    setMsg(null);
+    const payload = await buildPayload();
+    const { error } = await backup(payload);
+    setBusy(false);
+    if (error) {
+      setMsg(error);
+    } else {
+      setLastSync(new Date().toLocaleString());
+      setMsg("Backed up ✓");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  async function handleRestore() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBusy(true);
+    setMsg(null);
+    const { data, error } = await restore();
+    setBusy(false);
+    if (error) {
+      setMsg(error);
+      return;
+    }
+    if (!data) {
+      setMsg("No backup found yet — tap “Back up now” first.");
+      return;
+    }
+    try {
+      await AsyncStorage.setItem(
+        MANUAL_VISITED_KEY,
+        JSON.stringify(data.manuallyVisited ?? [])
+      );
+    } catch {}
+    if (data.homeCountry) await setHomeCity({ country: data.homeCountry });
+    (data.bucketList ?? []).forEach((c) => addToBucket(c));
+    setMsg("Restored ✓ — reopen the Map tab to see your countries.");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  if (user) {
+    return (
+      <View style={cardStyle}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="cloud-done-outline" size={18} color={colors.accent} />
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
+        </View>
+        <View style={[styles.accountRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Ionicons name="person-circle-outline" size={22} color={colors.primary} />
+          <Text style={[styles.accountEmail, { color: colors.foreground }]} numberOfLines={1}>
+            {user.email}
+          </Text>
+        </View>
+        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
+          Back up your home country, bucket list and map selections so they survive a
+          reinstall or a move to a new phone.
+        </Text>
+        <View style={styles.homeActions}>
+          <TouchableOpacity
+            onPress={handleBackup}
+            disabled={busy}
+            style={[styles.actionBtn, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+          >
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>Back up now</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleRestore}
+            disabled={busy}
+            style={[styles.actionBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+          >
+            <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Restore</Text>
+          </TouchableOpacity>
+        </View>
+        {busy && <ActivityIndicator color={colors.accent} />}
+        {lastSync && (
+          <Text style={[styles.syncNote, { color: colors.mutedForeground }]}>
+            Last backup: {lastSync}
+          </Text>
+        )}
+        {msg && (
+          <Text style={[styles.syncNote, { color: colors.accent }]}>{msg}</Text>
+        )}
+        <TouchableOpacity onPress={async () => { await signOut(); setMsg(null); }} style={styles.signOutBtn}>
+          <Ionicons name="log-out-outline" size={16} color={colors.destructive} />
+          <Text style={[styles.signOutText, { color: colors.destructive }]}>Sign out</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={cardStyle}>
+      <View style={styles.sectionHeader}>
+        <Ionicons name="cloud-upload-outline" size={18} color={colors.accent} />
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          {mode === "signup" ? "Create account" : "Sign in"}
+        </Text>
+      </View>
+      <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
+        Keep your travel stats backed up and synced across your devices.
+      </Text>
+      <TextInput
+        style={[styles.authInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+        placeholder="Email"
+        placeholderTextColor={colors.mutedForeground}
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoCorrect={false}
+      />
+      <TextInput
+        style={[styles.authInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+        placeholder="Password"
+        placeholderTextColor={colors.mutedForeground}
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoCapitalize="none"
+      />
+      {msg && <Text style={[styles.syncNote, { color: colors.accent }]}>{msg}</Text>}
+      <TouchableOpacity
+        onPress={handleAuth}
+        disabled={busy}
+        style={[styles.setHomeBtn, { backgroundColor: colors.accent, opacity: busy ? 0.7 : 1 }]}
+        activeOpacity={0.85}
+      >
+        {busy ? (
+          <ActivityIndicator color={colors.accentForeground} />
+        ) : (
+          <Text style={[styles.setHomeText, { color: colors.accentForeground }]}>
+            {mode === "signup" ? "Create account" : "Sign in"}
+          </Text>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => { setMode(mode === "signup" ? "signin" : "signup"); setMsg(null); }}
+        style={{ alignSelf: "center" }}
+      >
+        <Text style={[styles.switchText, { color: colors.primary }]}>
+          {mode === "signup"
+            ? "Already have an account? Sign in"
+            : "New here? Create an account"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function ProfileTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { homeCity, setHomeCity } = useHomeCity();
-  const { countries } = useTravel();
+  const { countries, refresh } = useTravel();
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const isWeb = Platform.OS === "web";
@@ -149,6 +500,17 @@ export default function ProfileTab() {
     await setHomeCity(null);
   }
 
+  function handleUpgraded() {
+    Alert.alert(
+      "Premium unlocked",
+      "Scan your full photo library now? This can take a few minutes for very large libraries — you can keep using the app while it runs.",
+      [
+        { text: "Later", style: "cancel" },
+        { text: "Scan now", onPress: () => refresh() },
+      ]
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
@@ -164,6 +526,12 @@ export default function ProfileTab() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+
+        {/* Premium */}
+        <PremiumSection onUpgraded={handleUpgraded} />
+
+        {/* Cloud account / backup (premium) */}
+        <AccountSection />
 
         {/* Home country section */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -308,6 +676,45 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   sectionTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold" },
   sectionDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+
+  // Premium
+  premiumPitchCard: { borderColor: "#F59E0B55" },
+  premiumActiveCard: { borderColor: "#F59E0B88" },
+  premiumBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 9,
+  },
+  premiumBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#0F172A", letterSpacing: 1 },
+  premiumActiveText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  premiumFeatureRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  premiumFeatureIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  premiumFeatureTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  premiumFeatureDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 2 },
+  premiumUpgradeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#F59E0B",
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 2,
+  },
+  premiumUpgradeText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#0F172A" },
+  premiumFootnote: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
+
   homeDisplay: {
     borderRadius: 12,
     borderWidth: 1,

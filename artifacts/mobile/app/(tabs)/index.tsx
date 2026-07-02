@@ -331,7 +331,19 @@ function BigStatCard({
 
 const bigCard = StyleSheet.create({
   card: { flex: 1, borderRadius: 20, padding: 18, minHeight: 130, justifyContent: "flex-end", overflow: "hidden" },
-  icon: { fontSize: 52, position: "absolute", top: 10, right: 10, opacity: 0.35 },
+  icon: {
+    // Fixed box + lineHeight so different emoji glyphs (with different
+    // intrinsic metrics) sit on the same horizontal line across cards.
+    fontSize: 48,
+    lineHeight: 56,
+    height: 56,
+    textAlign: "center",
+    position: "absolute",
+    top: 12,
+    right: 12,
+    opacity: 0.35,
+    includeFontPadding: false,
+  },
   value: { fontSize: 44, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 48 },
   label: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 2 },
 });

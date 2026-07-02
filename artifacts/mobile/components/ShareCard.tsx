@@ -191,18 +191,32 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const fileUriRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusRef = useRef<Status>("generating");
+  statusRef.current = status;
 
+  const clearWatchdog = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // The watchdog must die with the modal — otherwise it fires ~30s later
+  // while the user is elsewhere in the app.
   useEffect(() => {
     if (visible) {
       setStatus("generating");
       setImageUri(null);
       fileUriRef.current = null;
+    } else {
+      clearWatchdog();
     }
-  }, [visible]);
+    return clearWatchdog;
+  }, [visible, clearWatchdog]);
 
   const handleMessage = useCallback(
     async (event: { nativeEvent: { data: string } }) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      clearWatchdog();
       try {
         const msg = JSON.parse(event.nativeEvent.data) as {
           type: string;
@@ -234,15 +248,20 @@ export default function ShareCard({ visible, stats, onClose }: Props) {
         onClose();
       }
     },
-    [onClose]
+    [onClose, clearWatchdog]
   );
 
   const handleWebViewLoad = useCallback(() => {
+    clearWatchdog();
     timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      // Only react if the card is genuinely still stuck generating —
+      // never surface a stale timeout after the modal has moved on.
+      if (statusRef.current !== "generating") return;
       Alert.alert("Timeout", "Took too long to generate. Please try again.");
       onClose();
     }, 30000);
-  }, [onClose]);
+  }, [onClose, clearWatchdog]);
 
   const handleShare = useCallback(async () => {
     if (!fileUriRef.current) return;

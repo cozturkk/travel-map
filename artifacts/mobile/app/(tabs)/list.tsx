@@ -242,15 +242,23 @@ function ChronoCityItem({
   );
 }
 
-function YearHeader({ year }: { year: string }) {
+function YearHeader({ year, entries }: { year: string; entries: ChronoEntry[] }) {
   const colors = useColors();
+  const nCountries = new Set(entries.map((e) => e.country)).size;
+  const nCities = entries.length;
   return (
     <View style={[styles.yearHeader, { backgroundColor: colors.background }]}>
-      <View style={[styles.yearLine, { backgroundColor: colors.border }]} />
-      <View style={[styles.yearPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.yearText, { color: colors.accent }]}>{year}</Text>
+      <View style={styles.yearHeaderRow}>
+        <View>
+          <Text style={[styles.yearText, { color: colors.foreground }]}>{year}</Text>
+          <View style={[styles.yearAccentBar, { backgroundColor: colors.accent }]} />
+        </View>
+        <View style={[styles.yearMetaChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.yearMetaText, { color: colors.mutedForeground }]}>
+            {nCountries} {nCountries === 1 ? "country" : "countries"} · {nCities} {nCities === 1 ? "city" : "cities"}
+          </Text>
+        </View>
       </View>
-      <View style={[styles.yearLine, { backgroundColor: colors.border }]} />
     </View>
   );
 }
@@ -363,7 +371,7 @@ export default function ListTab() {
         renderItem={({ item }) => (
           <ChronoCityItem item={item} onPhotoPress={openViewer} />
         )}
-        renderSectionHeader={({ section }) => <YearHeader year={section.year} />}
+        renderSectionHeader={({ section }) => <YearHeader year={section.year} entries={section.data} />}
         contentContainerStyle={{ paddingTop: topPad + 8, paddingBottom: insets.bottom + 80 }}
         stickySectionHeadersEnabled
         refreshControl={
@@ -454,13 +462,15 @@ const styles = StyleSheet.create({
   timelineLabelText: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1 },
 
   // Year header
-  yearHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, gap: 10 },
-  yearLine: { flex: 1, height: 1 },
-  yearPill: { paddingHorizontal: 18, paddingVertical: 7, borderRadius: 16, borderWidth: 1 },
-  yearText: { fontSize: 30, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
+  yearHeader: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 },
+  yearHeaderRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  yearText: { fontSize: 34, fontFamily: "Inter_700Bold", letterSpacing: -0.5, lineHeight: 40 },
+  yearAccentBar: { width: 38, height: 4, borderRadius: 2, marginTop: 4 },
+  yearMetaChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1, marginBottom: 6 },
+  yearMetaText: { fontSize: 12, fontFamily: "Inter_500Medium", letterSpacing: 0.3 },
 
   // Chrono item
-  chronoBlock: { borderBottomWidth: 1, marginHorizontal: 16, paddingVertical: 0 },
+  chronoBlock: { borderBottomWidth: StyleSheet.hairlineWidth, marginHorizontal: 16, paddingVertical: 0 },
   chronoRow: { flexDirection: "row", alignItems: "flex-start", paddingTop: 12, paddingBottom: 8, gap: 10 },
   chronoFlag: { fontSize: 24, lineHeight: 30, paddingTop: 1 },
   chronoInfo: { flex: 1 },
