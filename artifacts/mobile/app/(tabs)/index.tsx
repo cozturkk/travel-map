@@ -259,7 +259,7 @@ function fetchGeo(attempt){
     } else {
       var cached=cacheGet();
       if(cached){applyGeo(cached);} 
-      else {document.getElementById('ld').textContent='Globe unavailable — tap to retry';
+      else {document.getElementById('ld').textContent='Globe unavailable, tap to retry';
         document.getElementById('ld').onclick=function(){document.getElementById('ld').onclick=null;document.getElementById('ld').textContent='Loading globe…';fetchGeo(1);};
         tick();sendUp(JSON.stringify({type:'mapError'}));}
     }
@@ -318,11 +318,11 @@ const WebIframe = React.memo(function WebIframe({
 // ─── Stat cards ──────────────────────────────────────────────────────────────
 
 function BigStatCard({
-  value, label, icon, bg,
-}: { value: string | number; label: string; icon: string; bg: string }) {
+  value, label, icon, bg, iconSize,
+}: { value: string | number; label: string; icon: string; bg: string; iconSize?: number }) {
   return (
     <View style={[bigCard.card, { backgroundColor: bg }]}>
-      <Text style={bigCard.icon}>{icon}</Text>
+      <Text style={[bigCard.icon, iconSize ? { fontSize: iconSize } : null]}>{icon}</Text>
       <Text style={bigCard.value}>{value}</Text>
       <Text style={bigCard.label}>{label}</Text>
     </View>
@@ -582,7 +582,7 @@ export default function MapTab() {
         <View style={styles.badgeInner}>
           <Ionicons name="globe" size={15} color={colors.accent} />
           <Text style={[styles.badgeCount, { color: colors.accent }]}>
-            {isLoading ? "—" : allVisited.length}
+            {isLoading ? "…" : allVisited.length}
           </Text>
           {!isLoading && bucketList.length > 0 && (
             <>
@@ -683,13 +683,14 @@ export default function MapTab() {
           <BigStatCard
             value={allVisited.length}
             label="countries visited"
-            icon="⛰️"
+            icon="🏔️"
             bg="#1B3A6A"
           />
           <BigStatCard
             value={`${pct}%`}
             label="of the world"
             icon="🌍"
+            iconSize={54}
             bg="#7C2D12"
           />
         </View>

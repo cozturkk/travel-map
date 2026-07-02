@@ -134,7 +134,7 @@ const PREMIUM_FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; d
   {
     icon: "images-outline",
     title: "Scan your entire photo library",
-    desc: `On the free plan you hand-pick which photos count (up to ${FREE_PHOTO_LIMIT}) with the iOS photo selector. Premium scans everything automatically — even 60,000+ photos.`,
+    desc: `On the free plan you hand-pick which photos count (up to ${FREE_PHOTO_LIMIT}) with the iOS photo selector. Premium scans everything automatically, even 60,000+ photos.`,
   },
   {
     icon: "cloud-done-outline",
@@ -166,7 +166,7 @@ function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
           onPress={() => {
             Alert.alert(
               "Deactivate Premium?",
-              "This is a preview control — it just relocks the premium features on this device.",
+              "This is a preview control. It just relocks the premium features on this device.",
               [
                 { text: "Cancel", style: "cancel" },
                 { text: "Deactivate", style: "destructive", onPress: () => deactivate() },
@@ -215,7 +215,7 @@ function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
         <Text style={styles.premiumUpgradeText}>Unlock Premium</Text>
       </TouchableOpacity>
       <Text style={[styles.premiumFootnote, { color: colors.mutedForeground }]}>
-        Preview unlock — App Store purchases are wired in before release.
+        Preview unlock. App Store purchases are wired in before release.
       </Text>
     </View>
   );
@@ -250,7 +250,7 @@ function AccountSection() {
         </View>
         <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
           Sign in to record your travels in the cloud and restore them on any phone.
-          This is a Premium feature — unlock it above.
+          This is a Premium feature, unlock it above.
         </Text>
       </View>
     );
@@ -264,9 +264,8 @@ function AccountSection() {
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
         </View>
         <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Sign-in and backup are built in, but need a free Supabase project to store your
-          data. Add your project URL and anon key (EXPO_PUBLIC_SUPABASE_URL and
-          EXPO_PUBLIC_SUPABASE_ANON_KEY) to turn this on.
+          Cloud sign-in is almost ready. It needs a one-time server setup to store
+          your backups; until then your travel history is kept safely on this phone.
         </Text>
       </View>
     );
@@ -348,7 +347,7 @@ function AccountSection() {
       return;
     }
     if (!data) {
-      setMsg("No backup found yet — tap “Back up now” first.");
+      setMsg("No backup found yet. Tap “Back up now” first.");
       return;
     }
     try {
@@ -359,7 +358,7 @@ function AccountSection() {
     } catch {}
     if (data.homeCountry) await setHomeCity({ country: data.homeCountry });
     (data.bucketList ?? []).forEach((c) => addToBucket(c));
-    setMsg("Restored ✓ — reopen the Map tab to see your countries.");
+    setMsg("Restored ✓ Reopen the Map tab to see your countries.");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
@@ -503,7 +502,7 @@ export default function ProfileTab() {
   function handleUpgraded() {
     Alert.alert(
       "Premium unlocked",
-      "Scan your full photo library now? This can take a few minutes for very large libraries — you can keep using the app while it runs.",
+      "Scan your full photo library now? This can take a few minutes for very large libraries. You can keep using the app while it runs, and you'll get a notice when it's done.",
       [
         { text: "Later", style: "cancel" },
         { text: "Scan now", onPress: () => refresh() },

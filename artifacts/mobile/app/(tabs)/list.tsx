@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -117,7 +118,7 @@ function TripSummaryBar({ countries, photos }: { countries: CountryVisit[]; phot
 // A single thumbnail that recovers from a missing/stale URI by re-resolving a
 // fresh local file path from the photo library (handles iCloud-optimized and
 // expired temp-file cases where the cached URI no longer loads).
-function Thumb({ uri, id, idx, onPress }: { uri: string; id?: string; idx: number; onPress: (i: number) => void }) {
+function Thumb({ uri, id, idx, onPress, onLongPress }: { uri: string; id?: string; idx: number; onPress: (i: number) => void; onLongPress?: () => void }) {
   const [src, setSrc] = useState(uri);
   const [failed, setFailed] = useState(false);
   const triedRef = React.useRef(false);
@@ -137,7 +138,12 @@ function Thumb({ uri, id, idx, onPress }: { uri: string; id?: string; idx: numbe
     }
   }, [id, src]);
   return (
-    <TouchableOpacity activeOpacity={0.8} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(idx); }}>
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(idx); }}
+      onLongPress={onLongPress}
+      delayLongPress={350}
+    >
       {failed ? (
         <View style={[styles.thumb, styles.thumbFallback]}>
           <Ionicons name="image-outline" size={20} color="rgba(148,163,184,0.7)" />
@@ -149,13 +155,33 @@ function Thumb({ uri, id, idx, onPress }: { uri: string; id?: string; idx: numbe
   );
 }
 
-function PhotoStrip({ uris, ids, onPress }: { uris: string[]; ids?: string[]; onPress: (i: number) => void }) {
+function PhotoStrip({
+  uris,
+  ids,
+  onPress,
+  onRemove,
+}: {
+  uris: string[];
+  ids?: string[];
+  onPress: (i: number) => void;
+  onRemove?: (id: string) => void;
+}) {
   if (uris.length === 0) return null;
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
-      {uris.map((uri, idx) => (
-        <Thumb key={idx} uri={uri} id={ids ? ids[idx] : undefined} idx={idx} onPress={onPress} />
-      ))}
+      {uris.map((uri, idx) => {
+        const id = ids ? ids[idx] : undefined;
+        return (
+          <Thumb
+            key={idx}
+            uri={uri}
+            id={id}
+            idx={idx}
+            onPress={onPress}
+            onLongPress={id && onRemove ? () => onRemove(id) : undefined}
+          />
+        );
+      })}
     </ScrollView>
   );
 }
@@ -165,9 +191,11 @@ function PhotoStrip({ uris, ids, onPress }: { uris: string[]; ids?: string[]; on
 function HomeCountryCard({
   countryVisit,
   onPhotoPress,
+  onRemovePhoto,
 }: {
   countryVisit: CountryVisit;
   onPhotoPress: (uris: string[], index: number) => void;
+  onRemovePhoto?: (id: string) => void;
 }) {
   const colors = useColors();
   const allUris = countryVisit.cities.flatMap((ci) => ci.photoUris ?? []);
@@ -192,6 +220,7 @@ function HomeCountryCard({
         uris={allUris}
         ids={allIds}
         onPress={(idx) => onPhotoPress(allUris, idx)}
+        onRemove={onRemovePhoto}
       />
       <Text style={[styles.homeCityNote, { color: colors.mutedForeground }]}>
         Not counted in trip stats
@@ -209,9 +238,11 @@ interface ChronoEntry extends CityVisit {
 function ChronoCityItem({
   item,
   onPhotoPress,
+  onRemovePhoto,
 }: {
   item: ChronoEntry;
   onPhotoPress: (uris: string[], index: number) => void;
+  onRemovePhoto?: (id: string) => void;
 }) {
   const colors = useColors();
   const flag = countryToFlag(item.country);
@@ -226,7 +257,7 @@ function ChronoCityItem({
             <Text style={styles.chronoCountry}>{item.country}</Text>
             <Text style={{ color: colors.mutedForeground }}> · </Text>
             <Text>{item.city}</Text>
-            <Text style={{ color: colors.mutedForeground }}> — {dateStr}</Text>
+            <Text style={{ color: colors.mutedForeground }}> · {dateStr}</Text>
           </Text>
         </View>
         <View style={[styles.photoBadge, { backgroundColor: colors.muted }]}>
@@ -238,6 +269,7 @@ function ChronoCityItem({
         uris={item.photoUris ?? []}
         ids={item.photoIds ?? []}
         onPress={(idx) => onPhotoPress(item.photoUris ?? [], idx)}
+        onRemove={onRemovePhoto}
       />
     </View>
   );
@@ -269,7 +301,7 @@ function YearHeader({ year, entries }: { year: string; entries: ChronoEntry[] })
 export default function ListTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { permissionGranted, isLoading, progress, countries, photos, refresh, addMorePhotos, accessPrivileges } = useTravel();
+  const { permissionGranted, isLoading, progress, countries, photos, refresh, addMorePhotos, excludePhoto, accessPrivileges } = useTravel();
   const { homeCity } = useHomeCity();
   const { isPremium } = usePremium();
 
@@ -277,6 +309,28 @@ export default function ListTab() {
   const openViewer = useCallback((uris: string[], index: number) => {
     setViewerState({ uris, index });
   }, []);
+
+  const handleRemovePhoto = useCallback(
+    (id: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Alert.alert(
+        "Remove this photo?",
+        "It will no longer count toward your trips and stats. The photo itself stays in your library.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: () => {
+              excludePhoto(id);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            },
+          },
+        ]
+      );
+    },
+    [excludePhoto]
+  );
 
   const handleAddPhotos = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -371,7 +425,7 @@ export default function ListTab() {
         sections={sections}
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => (
-          <ChronoCityItem item={item} onPhotoPress={openViewer} />
+          <ChronoCityItem item={item} onPhotoPress={openViewer} onRemovePhoto={handleRemovePhoto} />
         )}
         renderSectionHeader={({ section }) => <YearHeader year={section.year} entries={section.data} />}
         contentContainerStyle={{ paddingTop: topPad + 8, paddingBottom: insets.bottom + 80 }}
@@ -405,7 +459,7 @@ export default function ListTab() {
 
             {homeCountryVisit && (
               <View style={styles.homeCitySection}>
-                <HomeCountryCard countryVisit={homeCountryVisit} onPhotoPress={openViewer} />
+                <HomeCountryCard countryVisit={homeCountryVisit} onPhotoPress={openViewer} onRemovePhoto={handleRemovePhoto} />
               </View>
             )}
 
@@ -413,6 +467,9 @@ export default function ListTab() {
               <View style={styles.timelineLabel}>
                 <Text style={[styles.timelineLabelText, { color: colors.mutedForeground }]}>
                   TIMELINE · {chronoEntries.length} {chronoEntries.length === 1 ? "CITY" : "CITIES"}
+                </Text>
+                <Text style={[styles.timelineHint, { color: colors.mutedForeground }]}>
+                  Hold a photo to remove it from your trips
                 </Text>
               </View>
             )}
@@ -466,6 +523,7 @@ const styles = StyleSheet.create({
 
   timelineLabel: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 },
   timelineLabelText: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1 },
+  timelineHint: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3, opacity: 0.7 },
 
   // Year header
   yearHeader: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 },

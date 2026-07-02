@@ -45,7 +45,7 @@ interface Props {
 function buildHTML(stats: ShareStats): string {
   const year = new Date().getFullYear();
   const pct = Math.max(1, Math.round((stats.countries / 195) * 100));
-  const since = stats.travelingSince > 0 ? String(stats.travelingSince) : '—';
+  const since = stats.travelingSince > 0 ? String(stats.travelingSince) : '·';
   const data = JSON.stringify({
     n: stats.countries,
     ci: stats.cities,
