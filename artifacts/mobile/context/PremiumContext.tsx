@@ -7,9 +7,8 @@ import React, {
   useState,
 } from "react";
 
-// Free tier scans only the most recent photos; Premium scans the whole library.
-export const FREE_PHOTO_LIMIT = 500;
-
+// Premium unlocks the cloud account & backup. Photo scanning is free for
+// everyone and always covers the whole permitted library.
 const PREMIUM_KEY = "premium_v1";
 
 interface PremiumContextType {
@@ -59,14 +58,4 @@ export function usePremium() {
   const ctx = useContext(PremiumContext);
   if (!ctx) throw new Error("usePremium must be used within PremiumProvider");
   return ctx;
-}
-
-// Non-hook accessor for code paths that run outside the React tree
-// (TravelContext reads this through a ref instead).
-export async function readPremiumFlag(): Promise<boolean> {
-  try {
-    return (await AsyncStorage.getItem(PREMIUM_KEY)) === "1";
-  } catch {
-    return false;
-  }
 }

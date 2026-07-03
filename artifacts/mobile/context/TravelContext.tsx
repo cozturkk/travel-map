@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import { Alert, Platform } from "react-native";
 import { WORLD_CITIES, ROLLUP_RADIUS_KM, type WorldCity } from "@/data/worldCities";
-import { FREE_PHOTO_LIMIT, readPremiumFlag } from "@/context/PremiumContext";
 
 // Only import native-only modules on native platforms
 const MediaLibrary =
@@ -237,7 +236,7 @@ function resolveCity(
 }
 
 // Photos are fetched in pages so a 60k+ library never has to come back in one
-// call. Free tier stops at FREE_PHOTO_LIMIT; Premium walks the whole library.
+// call. The whole (permitted) library is always scanned.
 const PAGE_SIZE = 1000;
 const BATCH_SIZE = 20;
 
@@ -552,7 +551,6 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     async (existing: PhotoAsset[], since: number) => {
       if (!MediaLibrary || !Location) return;
       try {
-        const premium = await readPremiumFlag();
         const assets: import("expo-media-library").Asset[] = [];
         let cursor: string | undefined;
         for (;;) {
@@ -564,20 +562,14 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
             sortBy: [MediaLibrary.SortBy.creationTime],
           });
           assets.push(...page.assets);
-          if (
-            !page.hasNextPage ||
-            !page.endCursor ||
-            page.assets.length === 0 ||
-            (!premium && assets.length >= FREE_PHOTO_LIMIT)
-          ) {
+          if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) {
             break;
           }
           cursor = page.endCursor;
         }
-        const capped = premium ? assets : assets.slice(0, FREE_PHOTO_LIMIT);
         const now = Date.now();
-        if (capped.length > 0) {
-          const newPhotos = await collectGpsPhotos(capped);
+        if (assets.length > 0) {
+          const newPhotos = await collectGpsPhotos(assets);
           if (newPhotos.length > 0) {
             await geocodePhotos(newPhotos);
             const newIds = new Set(newPhotos.map((p) => p.id));
@@ -625,32 +617,24 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     try {
       setProgress({ current: 0, total: 1, stage: "Loading photo library..." });
 
-      const premium = await readPremiumFlag();
-      const limit = premium ? Number.POSITIVE_INFINITY : FREE_PHOTO_LIMIT;
-
       // Page through the library (newest first) instead of one giant request,
-      // so premium users with 60k+ photos can be scanned safely.
+      // so 60k+ libraries can be scanned safely.
       const assets: import("expo-media-library").Asset[] = [];
       let cursor: string | undefined;
       for (;;) {
         const page = await MediaLibrary.getAssetsAsync({
           mediaType: MediaLibrary.MediaType.photo,
-          first: Math.min(PAGE_SIZE, limit - assets.length),
+          first: PAGE_SIZE,
           after: cursor,
           sortBy: [MediaLibrary.SortBy.creationTime],
         });
         assets.push(...page.assets);
         setProgress({
           current: assets.length,
-          total: Math.min(limit, page.totalCount ?? assets.length),
+          total: page.totalCount ?? assets.length,
           stage: "Loading photo library...",
         });
-        if (
-          assets.length >= limit ||
-          !page.hasNextPage ||
-          !page.endCursor ||
-          page.assets.length === 0
-        ) {
+        if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) {
           break;
         }
         cursor = page.endCursor;

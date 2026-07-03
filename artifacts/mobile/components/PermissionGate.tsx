@@ -31,8 +31,9 @@ export default function PermissionGate() {
         your personal travel history. No photos leave your device.
       </Text>
       <Text style={[styles.tierNote, { color: colors.mutedForeground }]}>
-        Free plan: choose “Select Photos…” and hand-pick the trips you want
-        (up to 500 photos). Premium scans your entire library automatically.
+        Choose “Allow Full Access” so every trip is found automatically.
+        A big library takes a few minutes the first time; you can keep using
+        the app and you'll get a notice when it's done.
       </Text>
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colors.primary }]}

@@ -4,10 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Image,
   Modal,
+  PanResponder,
   Platform,
   RefreshControl,
   ScrollView,
@@ -49,9 +51,49 @@ function PhotoViewer({
   const { width, height } = Dimensions.get("window");
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
+  // Drag up or down to dismiss, like the iOS Photos app. The horizontal
+  // FlatList keeps swipe-between-photos; we only claim clearly vertical drags.
+  const translateY = React.useRef(new Animated.Value(0)).current;
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dy) > 14 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      onPanResponderMove: (_, g) => translateY.setValue(g.dy),
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dy) > 110 || Math.abs(g.vy) > 0.8) {
+          Animated.timing(translateY, {
+            toValue: g.dy >= 0 ? height : -height,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => onClose());
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+  const bgOpacity = translateY.interpolate({
+    inputRange: [-280, 0, 280],
+    outputRange: [0.3, 1, 0.3],
+    extrapolate: "clamp",
+  });
+
   return (
-    <Modal visible animationType="fade" statusBarTranslucent>
-      <View style={{ flex: 1, backgroundColor: "#000" }}>
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { backgroundColor: "#000", opacity: bgOpacity }]}
+      />
+      <Animated.View
+        style={{ flex: 1, transform: [{ translateY }] }}
+        {...panResponder.panHandlers}
+      >
         <View style={pvStyles.bar}>
           <TouchableOpacity onPress={onClose} hitSlop={16} style={pvStyles.closeBtn}>
             <Ionicons name="close" size={28} color="#fff" />
@@ -74,7 +116,7 @@ function PhotoViewer({
             <Image source={{ uri: item }} style={{ width, height: height - 140 }} resizeMode="contain" />
           )}
         />
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

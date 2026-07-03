@@ -21,7 +21,7 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth, type BackupData } from "@/context/AuthContext";
 import { useBucketList } from "@/context/BucketListContext";
 import { useHomeCity } from "@/context/HomeCityContext";
-import { FREE_PHOTO_LIMIT, usePremium } from "@/context/PremiumContext";
+import { usePremium } from "@/context/PremiumContext";
 import { useTravel } from "@/context/TravelContext";
 import { countryToFlag } from "@/utils/countryFlags";
 
@@ -141,14 +141,9 @@ function CityPickerModal({
 
 const PREMIUM_FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; desc: string }[] = [
   {
-    icon: "images-outline",
-    title: "Scan your entire photo library",
-    desc: `On the free plan you hand-pick which photos count (up to ${FREE_PHOTO_LIMIT}) with the iOS photo selector. Premium scans everything automatically, even 60,000+ photos.`,
-  },
-  {
     icon: "cloud-done-outline",
     title: "Account & cloud backup",
-    desc: "Sign in to back up your map selections, bucket list and home country, and restore them on any phone.",
+    desc: "Sign in to record your travels in the cloud: map selections, bucket list and home city survive a reinstall or a move to a new phone.",
   },
 ];
 
@@ -169,7 +164,7 @@ function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
           <Text style={[styles.premiumActiveText, { color: colors.mutedForeground }]}>active</Text>
         </View>
         <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Full-library scanning and cloud backup are unlocked. Thanks for supporting Travel Map!
+          Cloud backup is unlocked. Thanks for supporting Travel Map!
         </Text>
         <TouchableOpacity
           onPress={() => {
@@ -484,7 +479,7 @@ export default function ProfileTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { homeCity, setHomeCity } = useHomeCity();
-  const { countries, refresh } = useTravel();
+  const { countries } = useTravel();
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const isWeb = Platform.OS === "web";
@@ -518,11 +513,7 @@ export default function ProfileTab() {
   function handleUpgraded() {
     Alert.alert(
       "Premium unlocked",
-      "Scan your full photo library now? This can take a few minutes for very large libraries. You can keep using the app while it runs, and you'll get a notice when it's done.",
-      [
-        { text: "Later", style: "cancel" },
-        { text: "Scan now", onPress: () => refresh() },
-      ]
+      "Sign in below to back up your travels to the cloud."
     );
   }
 
@@ -688,7 +679,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 32, fontFamily: "Inter_700Bold" },
   headerSub: { fontSize: 15, fontFamily: "Inter_400Regular", marginTop: 2 },
-  content: { flex: 1, paddingHorizontal: 16, paddingTop: 16, gap: 14 },
+  // No flex: 1 here: it would pin the content to the viewport height and
+  // stop the ScrollView from scrolling once sections overflow.
+  content: { paddingHorizontal: 16, paddingTop: 16, gap: 14 },
   section: {
     borderRadius: 16,
     borderWidth: 1,
