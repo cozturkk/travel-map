@@ -25,22 +25,23 @@ import { FREE_PHOTO_LIMIT, usePremium } from "@/context/PremiumContext";
 import { useTravel } from "@/context/TravelContext";
 import { countryToFlag } from "@/utils/countryFlags";
 
-interface CountryOption {
+interface CityOption {
+  city: string;
   country: string;
   photoCount: number;
 }
 
 const MANUAL_VISITED_KEY = "manual_visited_v1";
 
-function CountryPickerModal({
+function CityPickerModal({
   visible,
   options,
   onSelect,
   onClose,
 }: {
   visible: boolean;
-  options: CountryOption[];
-  onSelect: (opt: CountryOption) => void;
+  options: CityOption[];
+  onSelect: (opt: CityOption) => void;
   onClose: () => void;
 }) {
   const colors = useColors();
@@ -49,7 +50,10 @@ function CountryPickerModal({
   const filtered = useMemo(() => {
     if (!query.trim()) return options;
     const q = query.toLowerCase();
-    return options.filter((o) => o.country.toLowerCase().includes(q));
+    return options.filter(
+      (o) =>
+        o.city.toLowerCase().includes(q) || o.country.toLowerCase().includes(q)
+    );
   }, [options, query]);
 
   return (
@@ -57,7 +61,7 @@ function CountryPickerModal({
       <View style={[pickerStyles.container, { backgroundColor: colors.background }]}>
         <View style={[pickerStyles.header, { borderBottomColor: colors.border }]}>
           <Text style={[pickerStyles.title, { color: colors.foreground }]}>
-            Select Home Country
+            Select Home City
           </Text>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Ionicons name="close" size={24} color={colors.mutedForeground} />
@@ -68,7 +72,7 @@ function CountryPickerModal({
           <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
           <TextInput
             style={[pickerStyles.searchInput, { color: colors.foreground }]}
-            placeholder="Search country…"
+            placeholder="Search city…"
             placeholderTextColor={colors.mutedForeground}
             value={query}
             onChangeText={setQuery}
@@ -83,7 +87,7 @@ function CountryPickerModal({
 
         <FlatList
           data={filtered}
-          keyExtractor={(item) => item.country}
+          keyExtractor={(item) => `${item.country}|${item.city}`}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={pickerStyles.list}
           renderItem={({ item }) => (
@@ -102,9 +106,14 @@ function CountryPickerModal({
             >
               <View style={pickerStyles.countryRowLeft}>
                 <Text style={pickerStyles.flag}>{countryToFlag(item.country)}</Text>
-                <Text style={[pickerStyles.countryName, { color: colors.foreground }]}>
-                  {item.country}
-                </Text>
+                <View>
+                  <Text style={[pickerStyles.countryName, { color: colors.foreground }]}>
+                    {item.city}
+                  </Text>
+                  <Text style={[pickerStyles.cityCountry, { color: colors.mutedForeground }]}>
+                    {item.country}
+                  </Text>
+                </View>
               </View>
               <View style={[pickerStyles.photoBadge, { backgroundColor: colors.muted }]}>
                 <Ionicons name="camera-outline" size={11} color={colors.mutedForeground} />
@@ -118,7 +127,7 @@ function CountryPickerModal({
             <View style={pickerStyles.emptyState}>
               <Ionicons name="search-outline" size={32} color={colors.mutedForeground} />
               <Text style={[pickerStyles.emptyText, { color: colors.mutedForeground }]}>
-                No countries match "{query}"
+                No cities match "{query}"
               </Text>
             </View>
           }
@@ -289,7 +298,7 @@ function AccountSection() {
     return {
       manuallyVisited,
       bucketList,
-      homeCountry: homeCity?.country ?? null,
+      homeCity: homeCity ?? null,
       stats: { countries: countries.length, cities: cityCount },
       updatedAt: new Date().toISOString(),
     };
@@ -356,7 +365,7 @@ function AccountSection() {
         JSON.stringify(data.manuallyVisited ?? [])
       );
     } catch {}
-    if (data.homeCountry) await setHomeCity({ country: data.homeCountry });
+    if (data.homeCity?.city && data.homeCity?.country) await setHomeCity(data.homeCity);
     (data.bucketList ?? []).forEach((c) => addToBucket(c));
     setMsg("Restored ✓ Reopen the Map tab to see your countries.");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -481,17 +490,24 @@ export default function ProfileTab() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
 
-  const countryOptions: CountryOption[] = useMemo(
+  // Every scanned city; most-photographed first since that is almost always home.
+  const cityOptions: CityOption[] = useMemo(
     () =>
       countries
-        .map((c) => ({ country: c.country, photoCount: c.photoCount }))
-        .sort((a, b) => a.country.localeCompare(b.country)),
+        .flatMap((c) =>
+          c.cities.map((ci) => ({
+            city: ci.city,
+            country: c.country,
+            photoCount: ci.photoCount,
+          }))
+        )
+        .sort((a, b) => b.photoCount - a.photoCount),
     [countries]
   );
 
-  async function handleSelect(opt: CountryOption) {
+  async function handleSelect(opt: CityOption) {
     setPickerVisible(false);
-    await setHomeCity({ country: opt.country });
+    await setHomeCity({ city: opt.city, country: opt.country });
   }
 
   async function handleClear() {
@@ -532,23 +548,29 @@ export default function ProfileTab() {
         {/* Cloud account / backup (premium) */}
         <AccountSection />
 
-        {/* Home country section */}
+        {/* Home city section */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.sectionHeader}>
             <Ionicons name="home" size={18} color={colors.accent} />
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Home Country</Text>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Home City</Text>
           </View>
           <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-            Photos from your home country are shown separately and excluded from trip stats.
+            Photos from your home city are excluded from trip stats. Other cities
+            in your country still count as trips.
           </Text>
 
           {homeCity ? (
             <View style={[styles.homeDisplay, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <View style={styles.homeInfo}>
                 <Text style={styles.homeFlag}>{countryToFlag(homeCity.country)}</Text>
-                <Text style={[styles.homeName, { color: colors.foreground }]}>
-                  {homeCity.country}
-                </Text>
+                <View>
+                  <Text style={[styles.homeName, { color: colors.foreground }]}>
+                    {homeCity.city}
+                  </Text>
+                  <Text style={[styles.homeCountrySub, { color: colors.mutedForeground }]}>
+                    {homeCity.country}
+                  </Text>
+                </View>
               </View>
               <View style={styles.homeActions}>
                 <TouchableOpacity
@@ -576,7 +598,7 @@ export default function ProfileTab() {
             >
               <Ionicons name="add-circle-outline" size={18} color={colors.accentForeground} />
               <Text style={[styles.setHomeText, { color: colors.accentForeground }]}>
-                Set Home Country
+                Set Home City
               </Text>
             </TouchableOpacity>
           )}
@@ -587,15 +609,15 @@ export default function ProfileTab() {
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Ionicons name="information-circle-outline" size={18} color={colors.mutedForeground} />
           <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-            Your home country photos appear pinned at the top of your Trips tab.
+            Your home city appears as a small chip at the top of your Trips tab.
             Countries visited abroad are shown in the Inspire tab to suggest new destinations.
           </Text>
         </View>
       </ScrollView>
 
-      <CountryPickerModal
+      <CityPickerModal
         visible={pickerVisible}
-        options={countryOptions}
+        options={cityOptions}
         onSelect={handleSelect}
         onClose={() => setPickerVisible(false)}
       />
@@ -644,6 +666,7 @@ const pickerStyles = StyleSheet.create({
   countryRowLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   flag: { fontSize: 28, lineHeight: 34 },
   countryName: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  cityCountry: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
   photoBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -723,6 +746,7 @@ const styles = StyleSheet.create({
   homeInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
   homeFlag: { fontSize: 36, lineHeight: 42 },
   homeName: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  homeCountrySub: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 1 },
   homeActions: { flexDirection: "row", gap: 10 },
   actionBtn: {
     flex: 1,

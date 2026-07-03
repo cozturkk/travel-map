@@ -12,7 +12,7 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 export interface BackupData {
   manuallyVisited: string[];
   bucketList: string[];
-  homeCountry: string | null;
+  homeCity: { city: string; country: string } | null;
   stats: { countries: number; cities: number } | null;
   updatedAt: string;
 }

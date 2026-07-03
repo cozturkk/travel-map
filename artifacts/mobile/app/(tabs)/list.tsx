@@ -258,27 +258,35 @@ export default function ListTab() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
 
-  const homeCountryVisit = useMemo(() => {
+  // Only the home CITY is pinned out of the timeline; every other city in the
+  // same country still counts as a trip.
+  const homeCityVisit = useMemo(() => {
     if (!homeCity) return null;
-    return countries.find((c) => c.country === homeCity.country) ?? null;
-  }, [countries, homeCity]);
-
-  const tripCountries = useMemo(() => {
-    if (!homeCity) return countries;
-    return countries.filter((c) => c.country !== homeCity.country);
+    const country = countries.find((c) => c.country === homeCity.country);
+    return country?.cities.find((ci) => ci.city === homeCity.city) ?? null;
   }, [countries, homeCity]);
 
   const tripPhotos = useMemo(() => {
     if (!homeCity) return photos;
-    return photos.filter((p) => p.country !== homeCity.country);
+    return photos.filter(
+      (p) => !(p.country === homeCity.country && p.city === homeCity.city)
+    );
   }, [photos, homeCity]);
 
-  // Flatten all cities and sort chronologically (newest first)
+  // Flatten all cities (minus home) and sort chronologically (newest first)
   const chronoEntries = useMemo<ChronoEntry[]>(() => {
-    return tripCountries
+    return countries
       .flatMap((c) => c.cities.map((ci) => ({ ...ci, country: c.country })))
+      .filter(
+        (e) => !(homeCity && e.country === homeCity.country && e.city === homeCity.city)
+      )
       .sort((a, b) => b.lastDate - a.lastDate);
-  }, [tripCountries]);
+  }, [countries, homeCity]);
+
+  const nTripCountries = useMemo(
+    () => new Set(chronoEntries.map((e) => e.country)).size,
+    [chronoEntries]
+  );
 
   // Group by year
   const sections = useMemo(() => {
@@ -357,19 +365,19 @@ export default function ListTab() {
             <View style={styles.pageHeader}>
               <Text style={[styles.pageTitle, { color: colors.foreground }]}>Trips</Text>
               <Text style={[styles.pageStats, { color: colors.mutedForeground }]}>
-                {tripCountries.length} {tripCountries.length === 1 ? "country" : "countries"} · {tripPhotos.length} photos
+                {nTripCountries} {nTripCountries === 1 ? "country" : "countries"} · {tripPhotos.length} photos
               </Text>
             </View>
 
-            {/* Compact home chip */}
-            {homeCountryVisit && (
+            {/* Compact home-city chip */}
+            {homeCity && (
               <View style={[styles.homeChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={styles.homeChipFlag}>{countryToFlag(homeCountryVisit.country)}</Text>
+                <Text style={styles.homeChipFlag}>{countryToFlag(homeCity.country)}</Text>
                 <Text style={[styles.homeChipName, { color: colors.foreground }]} numberOfLines={1}>
-                  {homeCountryVisit.country}
+                  {homeCity.city}
                 </Text>
                 <Text style={[styles.homeChipMeta, { color: colors.mutedForeground }]}>
-                  · home · {homeCountryVisit.photoCount}
+                  · home{homeCityVisit ? ` · ${homeCityVisit.photoCount}` : ""}
                 </Text>
                 <Text style={[styles.homeChipNote, { color: colors.mutedForeground }]}>not counted</Text>
               </View>

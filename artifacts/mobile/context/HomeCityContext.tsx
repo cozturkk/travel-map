@@ -7,7 +7,10 @@ import React, {
   useState,
 } from "react";
 
+// Home is a CITY, not a country: excluding only the home city from trips lets
+// every other city in the same country still show up in the timeline.
 export interface HomeCity {
+  city: string;
   country: string;
 }
 
@@ -17,7 +20,10 @@ interface HomeCityContextType {
 }
 
 const HomeCityContext = createContext<HomeCityContextType | null>(null);
-const HOME_CITY_KEY = "home_country_v1";
+// v2: value is { city, country }. The old home_country_v1 (country only) can't
+// be mapped to a city automatically, so it is simply ignored; the user picks
+// their home city once in Profile.
+const HOME_CITY_KEY = "home_city_v2";
 
 export function HomeCityProvider({ children }: { children: React.ReactNode }) {
   const [homeCity, setHomeCityState] = useState<HomeCity | null>(null);
@@ -25,7 +31,10 @@ export function HomeCityProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(HOME_CITY_KEY)
       .then((v) => {
-        if (v) setHomeCityState(JSON.parse(v) as HomeCity);
+        if (v) {
+          const parsed = JSON.parse(v) as HomeCity;
+          if (parsed?.city && parsed?.country) setHomeCityState(parsed);
+        }
       })
       .catch(() => {});
   }, []);
