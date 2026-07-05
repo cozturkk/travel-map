@@ -353,7 +353,7 @@ const bigCard = StyleSheet.create({
 export default function MapTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { permissionGranted, isLoading, progress, countries, visitedCountryNames, photos } = useTravel();
+  const { permissionGranted, isLoading, initialScanning, progress, countries, visitedCountryNames, photos, accessPrivileges, addMorePhotos } = useTravel();
   const { bucketList, addToBucket, removeFromBucket, isInBucket } = useBucketList();
 
   const webviewRef = useRef<WebView>(null);
@@ -631,15 +631,48 @@ export default function MapTab() {
           />
         )}
 
-        {/* Loading overlay */}
-        {isLoading && (
+        {/* First-run experience: shown ONLY when no prior scan exists. The
+            globe behind it fills in live as batches complete; that IS the
+            loading experience. */}
+        {initialScanning ? (
+          <View style={styles.firstRunWrap} pointerEvents="box-none">
+            <View style={[styles.firstRunCard, { backgroundColor: "rgba(15,23,42,0.92)", borderColor: colors.border }]}>
+              <View style={styles.firstRunTitleRow}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={[styles.firstRunTitle, { color: colors.foreground }]}>
+                  Building your travel map
+                </Text>
+              </View>
+              <Text style={[styles.firstRunSub, { color: colors.mutedForeground }]}>
+                This takes a minute or two the first time. After this, it's instant.
+              </Text>
+              {progress.total > 0 && (
+                <Text style={[styles.firstRunProgress, { color: colors.accent }]}>
+                  {progress.current.toLocaleString()} of {progress.total.toLocaleString()}
+                  {accessPrivileges === "limited" ? " selected photos" : " photos"}
+                  {" · "}
+                  {progress.countriesFound} {progress.countriesFound === 1 ? "country" : "countries"} found so far
+                </Text>
+              )}
+              {accessPrivileges === "limited" && (
+                <TouchableOpacity
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); addMorePhotos(); }}
+                  style={[styles.firstRunAddBtn, { borderColor: colors.border }]}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.firstRunAddText, { color: colors.primary }]}>Add more photos</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ) : isLoading ? (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="small" color={colors.accent} />
             <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
               {progress.stage}{progress.total > 0 ? ` ${progress.current}/${progress.total}` : ""}
             </Text>
           </View>
-        )}
+        ) : null}
 
         {/* Tap hint */}
         {mapReady && allVisited.length === 0 && !isLoading && (
@@ -1027,6 +1060,41 @@ const styles = StyleSheet.create({
   webview: { flex: 1, backgroundColor: "#020C18" },
   loadingOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 6 },
   loadingText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+
+  // First-run scan experience (over the live-filling globe)
+  firstRunWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 10,
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  firstRunCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 6,
+    maxWidth: 420,
+    width: "100%",
+  },
+  firstRunTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  firstRunTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  firstRunSub: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+  firstRunProgress: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 2 },
+  firstRunAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 4,
+  },
+  firstRunAddText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 
   badgeInner: { flexDirection: "row", alignItems: "center", gap: 5 },
   badgeCount: { fontSize: 17, fontFamily: "Inter_700Bold" },

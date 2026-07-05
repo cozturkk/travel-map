@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { Image as ExpoImage } from "expo-image";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,7 +8,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   Modal,
   PanResponder,
   Platform,
@@ -40,11 +40,11 @@ function fmtMonth(ts: number) {
 // ─── Photo Viewer ────────────────────────────────────────────────────────────
 
 function PhotoViewer({
-  uris,
+  ids,
   initialIndex,
   onClose,
 }: {
-  uris: string[];
+  ids: string[];
   initialIndex: number;
   onClose: () => void;
 }) {
@@ -98,12 +98,12 @@ function PhotoViewer({
           <TouchableOpacity onPress={onClose} hitSlop={16} style={pvStyles.closeBtn}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
-          <Text style={pvStyles.counter}>{currentIndex + 1} / {uris.length}</Text>
+          <Text style={pvStyles.counter}>{currentIndex + 1} / {ids.length}</Text>
           <View style={{ width: 48 }} />
         </View>
         <FlatList
-          data={uris}
-          keyExtractor={(_, i) => String(i)}
+          data={ids}
+          keyExtractor={(id) => id}
           horizontal
           pagingEnabled
           initialScrollIndex={initialIndex}
@@ -113,7 +113,14 @@ function PhotoViewer({
             setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / width));
           }}
           renderItem={({ item }) => (
-            <Image source={{ uri: item }} style={{ width, height: height - 140 }} resizeMode="contain" />
+            // ph:// resolves through PhotoKit; for the full-size view a
+            // network fetch from iCloud is acceptable (user asked for it).
+            <ExpoImage
+              source={{ uri: `ph://${item}` }}
+              style={{ width, height: height - 140 }}
+              contentFit="contain"
+              transition={120}
+            />
           )}
         />
       </Animated.View>
@@ -129,29 +136,33 @@ const pvStyles = StyleSheet.create({
 
 // ─── Photo Strip ─────────────────────────────────────────────────────────────
 
-// A single thumbnail that recovers from a missing/stale URI by re-resolving a
-// fresh local file path from the photo library (handles iCloud-optimized and
-// expired temp-file cases where the cached URI no longer loads). Thumbnails
-// that still can't load render nothing: no empty placeholder tiles.
-function Thumb({ uri, id, idx, onPress, onLongPress }: { uri: string; id?: string; idx: number; onPress: (i: number) => void; onLongPress?: () => void }) {
-  const [src, setSrc] = useState(uri);
+// A single thumbnail rendered straight from the asset id (ph://<id>).
+// expo-image resolves ph:// through PhotoKit and serves the on-device
+// preview even when the original lives in iCloud ("Optimize iPhone Storage"),
+// so no full-resolution download is ever triggered for a 84px tile.
+//
+// Error path (rare, mostly deleted assets): one cheap getAssetInfoAsync
+// WITHOUT shouldDownloadFromNetwork; if the asset is gone, report it dead
+// (lazy deletion) and render nothing. No placeholder tiles.
+function Thumb({ id, idx, onPress, onLongPress, onDead }: { id: string; idx: number; onPress: (i: number) => void; onLongPress?: () => void; onDead?: (id: string) => void }) {
+  const [src, setSrc] = useState(`ph://${id}`);
   const [failed, setFailed] = useState(false);
   const triedRef = React.useRef(false);
-  useEffect(() => { setSrc(uri); setFailed(false); triedRef.current = false; }, [uri]);
+  useEffect(() => { setSrc(`ph://${id}`); setFailed(false); triedRef.current = false; }, [id]);
   const handleError = useCallback(() => {
-    if (!triedRef.current && id && MediaLibrary) {
+    if (!triedRef.current && MediaLibrary) {
       triedRef.current = true;
-      MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true })
+      MediaLibrary.getAssetInfoAsync(id)
         .then((info: any) => {
-          const fresh = info && info.localUri;
+          const fresh = info && (info.localUri ?? info.uri);
           if (fresh && fresh !== src) { setSrc(fresh); setFailed(false); }
-          else setFailed(true);
+          else { setFailed(true); onDead?.(id); }
         })
-        .catch(() => setFailed(true));
+        .catch(() => { setFailed(true); onDead?.(id); });
     } else {
       setFailed(true);
     }
-  }, [id, src]);
+  }, [id, src, onDead]);
   if (failed) return null;
   return (
     <TouchableOpacity
@@ -160,38 +171,41 @@ function Thumb({ uri, id, idx, onPress, onLongPress }: { uri: string; id?: strin
       onLongPress={onLongPress}
       delayLongPress={350}
     >
-      <Image source={{ uri: src }} style={styles.thumb} onError={handleError} />
+      <ExpoImage
+        source={{ uri: src }}
+        style={styles.thumb}
+        contentFit="cover"
+        transition={100}
+        onError={handleError}
+      />
     </TouchableOpacity>
   );
 }
 
 function PhotoStrip({
-  uris,
   ids,
   onPress,
   onRemove,
+  onDead,
 }: {
-  uris: string[];
-  ids?: string[];
+  ids: string[];
   onPress: (i: number) => void;
   onRemove?: (id: string) => void;
+  onDead?: (id: string) => void;
 }) {
-  if (uris.length === 0) return null;
+  if (ids.length === 0) return null;
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
-      {uris.map((uri, idx) => {
-        const id = ids ? ids[idx] : undefined;
-        return (
-          <Thumb
-            key={idx}
-            uri={uri}
-            id={id}
-            idx={idx}
-            onPress={onPress}
-            onLongPress={id && onRemove ? () => onRemove(id) : undefined}
-          />
-        );
-      })}
+      {ids.map((id, idx) => (
+        <Thumb
+          key={id}
+          id={id}
+          idx={idx}
+          onPress={onPress}
+          onLongPress={onRemove ? () => onRemove(id) : undefined}
+          onDead={onDead}
+        />
+      ))}
     </ScrollView>
   );
 }
@@ -206,10 +220,12 @@ function TripCard({
   item,
   onPhotoPress,
   onRemovePhoto,
+  onDeadPhoto,
 }: {
   item: ChronoEntry;
-  onPhotoPress: (uris: string[], index: number) => void;
+  onPhotoPress: (ids: string[], index: number) => void;
   onRemovePhoto?: (id: string) => void;
+  onDeadPhoto?: (id: string) => void;
 }) {
   const colors = useColors();
   const flag = countryToFlag(item.country);
@@ -234,10 +250,10 @@ function TripCard({
         </View>
       </View>
       <PhotoStrip
-        uris={item.photoUris ?? []}
         ids={item.photoIds ?? []}
-        onPress={(idx) => onPhotoPress(item.photoUris ?? [], idx)}
+        onPress={(idx) => onPhotoPress(item.photoIds ?? [], idx)}
         onRemove={onRemovePhoto}
+        onDead={onDeadPhoto}
       />
     </View>
   );
@@ -262,12 +278,12 @@ function YearHeader({ year, entries }: { year: string; entries: ChronoEntry[] })
 export default function ListTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { permissionGranted, isLoading, progress, countries, photos, refresh, addMorePhotos, excludePhoto } = useTravel();
+  const { permissionGranted, isLoading, progress, countries, photos, refresh, addMorePhotos, excludePhoto, reportDeadAsset } = useTravel();
   const { homeCity } = useHomeCity();
 
-  const [viewerState, setViewerState] = useState<{ uris: string[]; index: number } | null>(null);
-  const openViewer = useCallback((uris: string[], index: number) => {
-    setViewerState({ uris, index });
+  const [viewerState, setViewerState] = useState<{ ids: string[]; index: number } | null>(null);
+  const openViewer = useCallback((ids: string[], index: number) => {
+    setViewerState({ ids, index });
   }, []);
 
   const handleRemovePhoto = useCallback(
@@ -350,11 +366,14 @@ export default function ListTab() {
       <View style={[styles.loadingContainer, { backgroundColor: colors.background, paddingTop: topPad }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
-          {progress.stage || "Loading..."}
+          {progress.stage || "Building your travel map..."}
         </Text>
         {progress.total > 0 && (
           <Text style={[styles.loadingSubtext, { color: colors.border }]}>
-            {progress.current} / {progress.total}
+            {progress.current.toLocaleString()} of {progress.total.toLocaleString()} photos
+            {progress.countriesFound > 0
+              ? ` · ${progress.countriesFound} ${progress.countriesFound === 1 ? "country" : "countries"} found`
+              : ""}
           </Text>
         )}
       </View>
@@ -393,7 +412,12 @@ export default function ListTab() {
         sections={sections}
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => (
-          <TripCard item={item} onPhotoPress={openViewer} onRemovePhoto={handleRemovePhoto} />
+          <TripCard
+            item={item}
+            onPhotoPress={openViewer}
+            onRemovePhoto={handleRemovePhoto}
+            onDeadPhoto={reportDeadAsset}
+          />
         )}
         renderSectionHeader={({ section }) => <YearHeader year={section.year} entries={section.data} />}
         contentContainerStyle={{ paddingTop: topPad + 8, paddingBottom: insets.bottom + 140 }}
@@ -439,7 +463,7 @@ export default function ListTab() {
 
       {viewerState && (
         <PhotoViewer
-          uris={viewerState.uris}
+          ids={viewerState.ids}
           initialIndex={viewerState.index}
           onClose={() => setViewerState(null)}
         />

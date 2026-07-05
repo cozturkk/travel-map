@@ -5,10 +5,12 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Alert, Platform } from "react-native";
 import { WORLD_CITIES, ROLLUP_RADIUS_KM, type WorldCity } from "@/data/worldCities";
+import { countryAt } from "@/utils/countryLookup";
 
 // Only import native-only modules on native platforms
 const MediaLibrary =
@@ -22,6 +24,8 @@ const Location =
 
 export interface PhotoAsset {
   id: string;
+  // ph:// asset uri. NEVER a localUri/file:// path: those go stale between
+  // sessions; thumbnails resolve ph:// through PhotoKit at render time.
   uri: string;
   latitude: number;
   longitude: number;
@@ -58,12 +62,16 @@ interface LoadingProgress {
   current: number;
   total: number;
   stage: string;
+  countriesFound: number;
 }
 
 interface TravelContextType {
   permissionGranted: boolean | null;
   requestPermission: () => Promise<void>;
   isLoading: boolean;
+  // True only during the very first full scan (no cached history yet):
+  // drives the one-time "Building your travel map" experience.
+  initialScanning: boolean;
   progress: LoadingProgress;
   photos: PhotoAsset[];
   countries: CountryVisit[];
@@ -71,14 +79,26 @@ interface TravelContextType {
   refresh: () => Promise<void>;
   addMorePhotos: () => Promise<void>;
   excludePhoto: (id: string) => void;
+  reportDeadAsset: (id: string) => void;
   accessPrivileges: "all" | "limited" | "none" | null;
 }
 
 const TravelContext = createContext<TravelContextType | null>(null);
 
-// v13: metro-dominance city rollup (Esenyurt/Silivri -> Istanbul)
-const CACHE_KEY = "travel_data_v13";
+// Results cache: just the processed photos. v14: ph:// uris + streamed scan.
+const CACHE_KEY = "travel_data_v14";
+// Scan bookkeeping, separate from results: watermark + processed count.
+const SCAN_STATE_KEY = "scan_state_v1";
+// Photos the user long-pressed out of their trips.
 const EXCLUDED_KEY = "excluded_photos_v1";
+// Assets that no longer resolve (deleted from the library); dropped lazily
+// at render time instead of rescanning for deletions.
+const DEAD_ASSETS_KEY = "dead_assets_v1";
+
+interface ScanState {
+  lastScanTimestamp: number;
+  processedCount: number;
+}
 
 // Lookup: well-known sub-city localities → parent city name.
 // Covers London boroughs, NYC boroughs, Tokyo special wards, Paris arrondissements.
@@ -170,12 +190,7 @@ function nearestMajorCity(lat: number, lon: number): string | null {
 
 // Admin-region rollup: many provinces are named after their metro (İstanbul,
 // Berlin, Tokyo, Luxembourg). When the reverse-geocoded region itself names a
-// major city within REGION_ROLLUP_KM, every photo in that province rolls up to
-// it, so outlying districts like Silivri or Esenyurt count as Istanbul even
-// though they are populous enough to be cities in their own right. The
-// distance guard keeps big states from swallowing far-away towns (a photo in
-// upstate "New York" never matches "New York City" by name anyway, and rural
-// Quebec 400km from Québec City stays local).
+// major city within REGION_ROLLUP_KM, photos in that province roll up to it.
 const REGION_ROLLUP_KM = 100;
 function normalizeName(s: string): string {
   // NFD + strip combining marks folds İ→I, é→e etc. so "İstanbul" == "Istanbul"
@@ -235,18 +250,23 @@ function resolveCity(
   return city ?? cleanSub ?? region ?? undefined;
 }
 
-// Photos are fetched in pages so a 60k+ library never has to come back in one
-// call. The whole (permitted) library is always scanned.
-const PAGE_SIZE = 1000;
+// Library pages: small enough to stream results batch by batch, big enough to
+// keep the number of round trips low on 60k+ libraries.
+const PAGE_SIZE = 500;
+// Concurrent getAssetInfoAsync lookups per inner batch.
 const BATCH_SIZE = 20;
 
 // Reverse-geocode results are permanent facts about coordinates, so they are
-// cached across rescans. This makes a full-library rescan cheap (the expensive
-// geocoding step only runs for never-seen location buckets) and avoids
-// hammering Apple's rate-limited geocoder on big libraries.
-// v3: results now use the metro-dominance rollup.
-const GEO_CACHE_KEY = "geo_cache_v3";
+// cached forever, keyed by a ~1km grid cell (2 decimal places). The cache is
+// intentionally SEPARATE from the results cache and survives travel_data
+// version bumps, so a rebuild is near-instant.
+const GEOCODE_CACHE_KEY = "geocode_cache_v1";
 type GeoCacheEntry = { country?: string; city?: string; region?: string };
+type GeoCache = Record<string, GeoCacheEntry>;
+
+function geoKey(lat: number, lon: number): string {
+  return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+}
 
 // Parse the TRUE capture time of a photo.
 // iOS MediaLibrary `creationTime` is often the date the asset was *added* to the
@@ -348,90 +368,113 @@ function buildCountryTree(photos: PhotoAsset[]): CountryVisit[] {
   return result;
 }
 
-// ─── Scan pipeline helpers (shared by the full scan and the silent top-up) ───
+// ─── Scan pipeline helpers (shared by the first scan and the delta scan) ────
 
-type ProgressFn = (current: number, total: number) => void;
-
-// Pull GPS + capture time out of assets, batch by batch. getAssetInfoAsync can
+// Pull GPS + capture time out of one page of assets. getAssetInfoAsync can
 // reject or resolve to null for broken / iCloud-pending assets, so every
 // lookup is individually shielded (a single bad photo must never kill a scan).
 async function collectGpsPhotos(
-  assets: import("expo-media-library").Asset[],
-  onProgress?: ProgressFn
+  assets: import("expo-media-library").Asset[]
 ): Promise<PhotoAsset[]> {
   if (!MediaLibrary) return [];
   const rawPhotos: PhotoAsset[] = [];
   for (let i = 0; i < assets.length; i += BATCH_SIZE) {
     const batch = assets.slice(i, i + BATCH_SIZE);
     const infos = await Promise.all(
-      batch.map((a) => MediaLibrary!.getAssetInfoAsync(a).catch(() => null))
+      batch.map((a) =>
+        MediaLibrary!.getAssetInfoAsync(a)
+          .then((info) => ({ info, asset: a }))
+          .catch(() => null)
+      )
     );
-    for (const info of infos) {
-      if (!info) continue;
+    for (const entry of infos) {
+      if (!entry || !entry.info) continue;
+      const { info, asset } = entry;
       const lat = Number(info.location?.latitude);
       const lon = Number(info.location?.longitude);
       if (isFinite(lat) && isFinite(lon) && (lat !== 0 || lon !== 0)) {
-        // Prefer localUri (file://) over uri (ph://) — Image cannot load ph:// URLs
-        const displayUri = info.localUri ?? info.uri;
         rawPhotos.push({
-          id: info.id,
-          uri: displayUri,
+          id: asset.id,
+          // ph:// uri straight from the asset; resolved via PhotoKit at render
+          uri: asset.uri,
           latitude: lat,
           longitude: lon,
           creationTime: captureTime(info),
         });
       }
     }
-    onProgress?.(Math.min(i + batch.length, assets.length), assets.length);
   }
   return rawPhotos;
 }
 
-// Resolve country/city for every photo, mutating them in place. Coordinates
-// are bucketed to ~11km and answered from the persistent geocode cache first.
-async function geocodePhotos(
-  rawPhotos: PhotoAsset[],
-  onProgress?: ProgressFn
-): Promise<void> {
-  if (!Location) return;
+async function loadGeoCache(): Promise<GeoCache> {
+  try {
+    const raw = await AsyncStorage.getItem(GEOCODE_CACHE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
 
-  const locationBuckets = new Map<string, PhotoAsset[]>();
+async function saveGeoCache(cache: GeoCache): Promise<void> {
+  try {
+    await AsyncStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+}
+
+// Resolve country/city for a batch of photos, mutating them in place.
+// Coordinates are clustered to a ~1km grid (2dp); each unique cell is
+// resolved ONCE, in this order:
+//   1. permanent cache hit: free.
+//   2. fully offline: metro rollup for the city + bundled borders for the
+//      country. Covers the huge majority of photos (metro areas) with zero
+//      network calls, and the result is deterministic, so it is cached.
+//   3. reverse geocode (6s timeout race) for rural / ambiguous cells; cached
+//      on success. On failure the cell still gets the best offline answer for
+//      this run, but is NOT cached, so the next scan retries the geocoder.
+async function geocodePhotos(rawPhotos: PhotoAsset[], geoCache: GeoCache): Promise<void> {
+  const clusters = new Map<string, PhotoAsset[]>();
   for (const photo of rawPhotos) {
     if (typeof photo.latitude !== "number" || typeof photo.longitude !== "number") continue;
-    const key = `${photo.latitude.toFixed(1)},${photo.longitude.toFixed(1)}`;
-    if (!locationBuckets.has(key)) locationBuckets.set(key, []);
-    locationBuckets.get(key)!.push(photo);
+    const key = geoKey(photo.latitude, photo.longitude);
+    if (!clusters.has(key)) clusters.set(key, []);
+    clusters.get(key)!.push(photo);
   }
 
-  let geoCache: Record<string, GeoCacheEntry> = {};
-  try {
-    const rawCache = await AsyncStorage.getItem(GEO_CACHE_KEY);
-    if (rawCache) geoCache = JSON.parse(rawCache);
-  } catch {}
-  const saveGeoCache = async () => {
-    try {
-      await AsyncStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache));
-    } catch {}
-  };
-
-  let geocodedCount = 0;
   let newSinceSave = 0;
-  for (const [key, bucketPhotos] of locationBuckets) {
+  for (const [key, clusterPhotos] of clusters) {
     const [lat, lon] = key.split(",").map(Number);
+
+    const apply = (e: GeoCacheEntry) => {
+      clusterPhotos.forEach((p) => {
+        p.country = e.country;
+        p.city = e.city;
+        p.region = e.region;
+      });
+    };
+
     const cached = geoCache[key];
     if (cached) {
-      bucketPhotos.forEach((p) => {
-        p.country = cached.country;
-        p.city = cached.city;
-        p.region = cached.region;
-      });
-      geocodedCount++;
-      if (geocodedCount % 50 === 0) onProgress?.(geocodedCount, locationBuckets.size);
+      apply(cached);
       continue;
     }
+
+    // Offline fast path: metro city + point-in-country, no network at all.
+    const offlineCity = nearestMajorCity(lat, lon);
+    const offlineCountry = countryAt(lat, lon);
+    if (offlineCity && offlineCountry) {
+      const entry: GeoCacheEntry = { country: offlineCountry, city: offlineCity };
+      apply(entry);
+      geoCache[key] = entry;
+      if (++newSinceSave >= 25) {
+        newSinceSave = 0;
+        await saveGeoCache(geoCache);
+      }
+      continue;
+    }
+
+    // Network path for rural / border / coastal cells.
+    if (!Location) continue;
     try {
-      // Race each lookup against a timeout so one hung/rate-limited
-      // reverse-geocode can't stall the whole load.
       const results = (await Promise.race([
         Location.reverseGeocodeAsync({ latitude: lat, longitude: lon }),
         new Promise((_, reject) =>
@@ -440,37 +483,32 @@ async function geocodePhotos(
       ])) as Awaited<ReturnType<typeof Location.reverseGeocodeAsync>>;
       if (results[0]) {
         const { country, city, region, subregion } = results[0];
-        // City resolution, most reliable first:
-        //  1. province named after its metro (İstanbul province → Istanbul)
-        //  2. GPS rollup to the nearest major city
-        //  3. cleaned reverse-geocoded locality
         const cityName =
           regionMajorCity(lat, lon, region) ??
-          nearestMajorCity(lat, lon) ??
+          offlineCity ??
           resolveCity(city, subregion, region);
-        bucketPhotos.forEach((p) => {
-          p.country = country ?? undefined;
-          p.city = cityName;
-          p.region = region ?? undefined;
-        });
-        geoCache[key] = {
-          country: country ?? undefined,
+        const entry: GeoCacheEntry = {
+          country: country ?? offlineCountry ?? undefined,
           city: cityName,
           region: region ?? undefined,
         };
-        newSinceSave++;
-        if (newSinceSave >= 25) {
+        apply(entry);
+        geoCache[key] = entry;
+        if (++newSinceSave >= 25) {
           newSinceSave = 0;
-          await saveGeoCache();
+          await saveGeoCache(geoCache);
         }
+      } else {
+        apply({ country: offlineCountry ?? undefined, city: offlineCity ?? undefined });
       }
-    } catch {}
-
-    geocodedCount++;
-    onProgress?.(geocodedCount, locationBuckets.size);
-    await new Promise((r) => setTimeout(r, 30));
+      // Gentle pacing for Apple's rate-limited geocoder.
+      await new Promise((r) => setTimeout(r, 30));
+    } catch {
+      // Best offline answer for this run; not cached so a later scan retries.
+      apply({ country: offlineCountry ?? undefined, city: offlineCity ?? undefined });
+    }
   }
-  if (newSinceSave > 0) await saveGeoCache();
+  if (newSinceSave > 0) await saveGeoCache(geoCache);
 }
 
 export function TravelProvider({ children }: { children: React.ReactNode }) {
@@ -481,13 +519,17 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     Platform.OS === "web" ? true : null
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [initialScanning, setInitialScanning] = useState(false);
   const [progress, setProgress] = useState<LoadingProgress>({
     current: 0,
     total: 0,
     stage: "",
+    countriesFound: 0,
   });
   const [photos, setPhotos] = useState<PhotoAsset[]>([]);
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
+  const [deadIds, setDeadIds] = useState<string[]>([]);
+  const scanningRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -495,6 +537,11 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(EXCLUDED_KEY)
       .then((v) => {
         if (v) setExcludedIds(JSON.parse(v));
+      })
+      .catch(() => {});
+    AsyncStorage.getItem(DEAD_ASSETS_KEY)
+      .then((v) => {
+        if (v) setDeadIds(JSON.parse(v));
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -510,11 +557,22 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Lazy deletion handling: assets that fail to resolve at render time were
+  // deleted from the library; drop them here instead of rescanning.
+  const reportDeadAsset = useCallback((id: string) => {
+    setDeadIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      AsyncStorage.setItem(DEAD_ASSETS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const visiblePhotos = useMemo(() => {
-    if (excludedIds.length === 0) return photos;
-    const ex = new Set(excludedIds);
-    return photos.filter((p) => !ex.has(p.id));
-  }, [photos, excludedIds]);
+    if (excludedIds.length === 0 && deadIds.length === 0) return photos;
+    const drop = new Set([...excludedIds, ...deadIds]);
+    return photos.filter((p) => !drop.has(p.id));
+  }, [photos, excludedIds, deadIds]);
 
   const countries = useMemo(() => buildCountryTree(visiblePhotos), [visiblePhotos]);
 
@@ -545,82 +603,36 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Silently look for photos taken since the last scan and fold them in.
-  // No spinners, no alerts: the cached history is already on screen.
-  const topUpNewPhotos = useCallback(
-    async (existing: PhotoAsset[], since: number) => {
-      if (!MediaLibrary || !Location) return;
+  const persistResults = useCallback(
+    async (allPhotos: PhotoAsset[], state: ScanState) => {
       try {
-        const assets: import("expo-media-library").Asset[] = [];
-        let cursor: string | undefined;
-        for (;;) {
-          const page = await MediaLibrary.getAssetsAsync({
-            mediaType: MediaLibrary.MediaType.photo,
-            first: PAGE_SIZE,
-            after: cursor,
-            createdAfter: since,
-            sortBy: [MediaLibrary.SortBy.creationTime],
-          });
-          assets.push(...page.assets);
-          if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) {
-            break;
-          }
-          cursor = page.endCursor;
-        }
-        const now = Date.now();
-        if (assets.length > 0) {
-          const newPhotos = await collectGpsPhotos(assets);
-          if (newPhotos.length > 0) {
-            await geocodePhotos(newPhotos);
-            const newIds = new Set(newPhotos.map((p) => p.id));
-            const merged = [
-              ...newPhotos,
-              ...existing.filter((p) => !newIds.has(p.id)),
-            ];
-            setPhotos(merged);
-            await AsyncStorage.setItem(
-              CACHE_KEY,
-              JSON.stringify({ photos: merged, timestamp: now })
-            );
-            return;
-          }
-        }
-        // Nothing new: just advance the scan watermark.
-        await AsyncStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({ photos: existing, timestamp: now })
-        );
+        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ photos: allPhotos }));
+        await AsyncStorage.setItem(SCAN_STATE_KEY, JSON.stringify(state));
       } catch {}
     },
     []
   );
 
-  const loadTravelData = useCallback(async () => {
-    if (!MediaLibrary || !Location) return;
-
-    // The library is scanned ONCE; after that the history lives on the phone.
-    // On later opens we show the cached result instantly and only look for
-    // photos taken since the last scan, in the background.
-    try {
-      const cached = await AsyncStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const { photos: cachedPhotos, timestamp } = JSON.parse(cached);
-        setPhotos(cachedPhotos);
-        topUpNewPhotos(cachedPhotos, timestamp ?? Date.now());
-        return;
-      }
-    } catch {}
-
+  // Streamed full scan: page through the library newest-first, process each
+  // page completely (GPS + geocode) and publish it to the UI immediately.
+  // The map filling in IS the loading experience.
+  const runFullScan = useCallback(async () => {
+    if (!MediaLibrary || !Location || scanningRef.current) return;
+    scanningRef.current = true;
     setIsLoading(true);
+    setInitialScanning(true);
     const scanStart = Date.now();
 
     try {
-      setProgress({ current: 0, total: 1, stage: "Loading photo library..." });
+      setProgress({ current: 0, total: 0, stage: "Looking at your photo library...", countriesFound: 0 });
 
-      // Page through the library (newest first) instead of one giant request,
-      // so 60k+ libraries can be scanned safely.
-      const assets: import("expo-media-library").Asset[] = [];
+      const geoCache = await loadGeoCache();
+      const accumulated: PhotoAsset[] = [];
+      const countriesSoFar = new Set<string>();
+      let processed = 0;
+      let newestTs = 0;
       let cursor: string | undefined;
+
       for (;;) {
         const page = await MediaLibrary.getAssetsAsync({
           mediaType: MediaLibrary.MediaType.photo,
@@ -628,62 +640,144 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           after: cursor,
           sortBy: [MediaLibrary.SortBy.creationTime],
         });
-        assets.push(...page.assets);
-        setProgress({
-          current: assets.length,
-          total: page.totalCount ?? assets.length,
-          stage: "Loading photo library...",
-        });
-        if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) {
-          break;
+
+        for (const a of page.assets) {
+          if (a.creationTime > newestTs) newestTs = a.creationTime;
         }
+
+        const gpsPhotos = await collectGpsPhotos(page.assets);
+        await geocodePhotos(gpsPhotos, geoCache);
+        accumulated.push(...gpsPhotos);
+        processed += page.assets.length;
+        for (const p of gpsPhotos) {
+          if (p.country) countriesSoFar.add(p.country);
+        }
+
+        // Publish this batch: map, trips and stats update live.
+        setPhotos([...accumulated]);
+        setProgress({
+          current: processed,
+          total: page.totalCount ?? processed,
+          stage: "Scanning photos...",
+          countriesFound: countriesSoFar.size,
+        });
+
+        if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) break;
         cursor = page.endCursor;
       }
 
-      setProgress({ current: 0, total: assets.length, stage: "Reading GPS data..." });
-      const rawPhotos = await collectGpsPhotos(assets, (current, total) =>
-        setProgress({ current, total, stage: "Reading GPS data..." })
-      );
+      await persistResults(accumulated, {
+        lastScanTimestamp: newestTs || scanStart,
+        processedCount: processed,
+      });
 
-      setProgress({ current: 0, total: 0, stage: "Identifying locations..." });
-      await geocodePhotos(rawPhotos, (current, total) =>
-        setProgress({ current, total, stage: "Identifying locations..." })
-      );
-
-      setPhotos(rawPhotos);
-
-      await AsyncStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({ photos: rawPhotos, timestamp: scanStart })
-      );
-
-      // One-time notice after a genuinely long first scan. Later opens never
-      // rescan, so this is only ever seen once per library.
+      // One-time notice after a genuinely long first scan; later opens only
+      // delta-scan and never show this.
       if (Date.now() - scanStart > 15000) {
-        const nCountries = new Set(
-          rawPhotos.map((p) => p.country).filter(Boolean)
-        ).size;
         Alert.alert(
           "Travel history ready",
-          `Scanned ${assets.length} photos and found trips in ${nCountries} ${
-            nCountries === 1 ? "country" : "countries"
+          `Scanned ${processed} photos and found trips in ${countriesSoFar.size} ${
+            countriesSoFar.size === 1 ? "country" : "countries"
           }. Your history is saved on this phone now; new photos are added automatically.`
         );
       }
     } catch (err) {
       console.error("Error loading travel data:", err);
     } finally {
+      scanningRef.current = false;
       setIsLoading(false);
+      setInitialScanning(false);
     }
-  }, [topUpNewPhotos]);
+  }, [persistResults]);
+
+  // Delta scan: only assets created since the last scan watermark. Silent —
+  // no spinner; new visits just appear.
+  //
+  // NOTE: this is the seam for future "new trip detected" notifications:
+  // `merged` minus `existing` here is exactly the set of newly found visits.
+  const runDeltaScan = useCallback(
+    async (existing: PhotoAsset[], state: ScanState) => {
+      if (!MediaLibrary || !Location || scanningRef.current) return;
+      scanningRef.current = true;
+      try {
+        const geoCache = await loadGeoCache();
+        const newPhotos: PhotoAsset[] = [];
+        let processed = 0;
+        let newestTs = state.lastScanTimestamp;
+        let cursor: string | undefined;
+
+        for (;;) {
+          const page = await MediaLibrary.getAssetsAsync({
+            mediaType: MediaLibrary.MediaType.photo,
+            first: PAGE_SIZE,
+            after: cursor,
+            createdAfter: state.lastScanTimestamp,
+            sortBy: [MediaLibrary.SortBy.creationTime],
+          });
+          for (const a of page.assets) {
+            if (a.creationTime > newestTs) newestTs = a.creationTime;
+          }
+          const gpsPhotos = await collectGpsPhotos(page.assets);
+          await geocodePhotos(gpsPhotos, geoCache);
+          newPhotos.push(...gpsPhotos);
+          processed += page.assets.length;
+          if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) break;
+          cursor = page.endCursor;
+        }
+
+        const nextState: ScanState = {
+          lastScanTimestamp: newestTs,
+          processedCount: state.processedCount + processed,
+        };
+        if (newPhotos.length > 0) {
+          const newIds = new Set(newPhotos.map((p) => p.id));
+          const merged = [...newPhotos, ...existing.filter((p) => !newIds.has(p.id))];
+          setPhotos(merged);
+          await persistResults(merged, nextState);
+        } else if (processed > 0 || newestTs !== state.lastScanTimestamp) {
+          await persistResults(existing, nextState);
+        }
+      } catch {
+      } finally {
+        scanningRef.current = false;
+      }
+    },
+    [persistResults]
+  );
+
+  const loadTravelData = useCallback(async () => {
+    if (!MediaLibrary || !Location) return;
+
+    // Prior scan exists: show it instantly, then delta-scan in the background.
+    try {
+      const [cached, stateRaw] = await Promise.all([
+        AsyncStorage.getItem(CACHE_KEY),
+        AsyncStorage.getItem(SCAN_STATE_KEY),
+      ]);
+      if (cached) {
+        const { photos: cachedPhotos } = JSON.parse(cached) as { photos: PhotoAsset[] };
+        setPhotos(cachedPhotos);
+        const state: ScanState = stateRaw
+          ? JSON.parse(stateRaw)
+          : { lastScanTimestamp: Date.now(), processedCount: cachedPhotos.length };
+        runDeltaScan(cachedPhotos, state);
+        return;
+      }
+    } catch {}
+
+    // First run: streamed full scan with the one-time progress experience.
+    await runFullScan();
+  }, [runFullScan, runDeltaScan]);
 
   const refresh = useCallback(async () => {
     await AsyncStorage.removeItem(CACHE_KEY);
-    await loadTravelData();
-  }, [loadTravelData]);
+    await AsyncStorage.removeItem(SCAN_STATE_KEY);
+    await runFullScan();
+  }, [runFullScan]);
 
   // Let the user pick more photos (limited access) or grant full access,
   // then re-scan so newly-allowed photos show up in their travel history.
+  // (The geocode cache makes this rescan cheap.)
   const addMorePhotos = useCallback(async () => {
     if (!MediaLibrary) return;
     const perm = await MediaLibrary.getPermissionsAsync();
@@ -710,6 +804,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
         permissionGranted,
         requestPermission,
         isLoading,
+        initialScanning,
         progress,
         photos: visiblePhotos,
         countries,
@@ -717,6 +812,7 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
         refresh,
         addMorePhotos,
         excludePhoto,
+        reportDeadAsset,
         accessPrivileges,
       }}
     >

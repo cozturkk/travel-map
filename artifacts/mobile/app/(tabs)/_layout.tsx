@@ -19,10 +19,6 @@ function NativeTabLayout() {
         <Icon sf={{ default: "list.bullet", selected: "list.bullet" }} />
         <Label>Trips</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="bucket">
-        <Icon sf={{ default: "bookmark", selected: "bookmark.fill" }} />
-        <Label>Bucket List</Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="inspire">
         <Icon sf={{ default: "sparkles", selected: "sparkles" }} />
         <Label>Inspire</Label>
@@ -91,18 +87,6 @@ function ClassicTabLayout() {
               <SymbolView name="list.bullet" tintColor={color} size={22} />
             ) : (
               <Feather name="list" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="bucket"
-        options={{
-          title: "Bucket List",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bookmark.fill" tintColor={color} size={22} />
-            ) : (
-              <Feather name="bookmark" size={22} color={color} />
             ),
         }}
       />
