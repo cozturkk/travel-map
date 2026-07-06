@@ -25,6 +25,7 @@ import { CityVisit, CountryVisit, useTravel } from "@/context/TravelContext";
 import { useHomeCity } from "@/context/HomeCityContext";
 import { countryToFlag } from "@/utils/countryFlags";
 import PermissionGate from "@/components/PermissionGate";
+import ScanProgress from "@/components/ScanProgress";
 
 const MediaLibrary =
   Platform.OS !== "web"
@@ -54,10 +55,15 @@ function PhotoViewer({
   // Drag up or down to dismiss, like the iOS Photos app. The horizontal
   // FlatList keeps swipe-between-photos; we only claim clearly vertical drags.
   const translateY = React.useRef(new Animated.Value(0)).current;
+  const isVerticalDrag = (_: unknown, g: { dy: number; dx: number }) =>
+    Math.abs(g.dy) > 14 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5;
   const panResponder = React.useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dy) > 14 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      // Claim in the CAPTURE phase too: the horizontal FlatList otherwise
+      // grabs every touch on device and the swipe-to-dismiss never fires.
+      onMoveShouldSetPanResponder: isVerticalDrag,
+      onMoveShouldSetPanResponderCapture: isVerticalDrag,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, g) => translateY.setValue(g.dy),
       onPanResponderRelease: (_, g) => {
         if (Math.abs(g.dy) > 110 || Math.abs(g.vy) > 0.8) {
@@ -364,17 +370,16 @@ export default function ListTab() {
   if (isLoading && countries.length === 0) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background, paddingTop: topPad }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
-          {progress.stage || "Building your travel map..."}
+        <Text style={[styles.loadingText, { color: colors.foreground }]}>
+          Building your travel map
         </Text>
-        {progress.total > 0 && (
-          <Text style={[styles.loadingSubtext, { color: colors.border }]}>
-            {progress.current.toLocaleString()} of {progress.total.toLocaleString()} photos
-            {progress.countriesFound > 0
-              ? ` · ${progress.countriesFound} ${progress.countriesFound === 1 ? "country" : "countries"} found`
-              : ""}
-          </Text>
+        <ScanProgress
+          current={progress.current}
+          total={progress.total}
+          countriesFound={progress.countriesFound}
+        />
+        {progress.total === 0 && (
+          <ActivityIndicator size="small" color={colors.primary} />
         )}
       </View>
     );

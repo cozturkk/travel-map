@@ -11,6 +11,7 @@ import React, {
 import { Alert, Platform } from "react-native";
 import { WORLD_CITIES, ROLLUP_RADIUS_KM, type WorldCity } from "@/data/worldCities";
 import { countryAt } from "@/utils/countryLookup";
+import { announceNewTrips } from "@/utils/milestones";
 
 // Only import native-only modules on native platforms
 const MediaLibrary =
@@ -616,7 +617,10 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
   // Streamed full scan: page through the library newest-first, process each
   // page completely (GPS + geocode) and publish it to the UI immediately.
   // The map filling in IS the loading experience.
-  const runFullScan = useCallback(async () => {
+  //
+  // `seed` carries the partial results of an interrupted earlier scan so a
+  // resume shows them instantly and skips re-reading those assets.
+  const runFullScan = useCallback(async (seed: PhotoAsset[] = []) => {
     if (!MediaLibrary || !Location || scanningRef.current) return;
     scanningRef.current = true;
     setIsLoading(true);
@@ -627,11 +631,14 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
       setProgress({ current: 0, total: 0, stage: "Looking at your photo library...", countriesFound: 0 });
 
       const geoCache = await loadGeoCache();
-      const accumulated: PhotoAsset[] = [];
+      const seenIds = new Set(seed.map((p) => p.id));
+      const accumulated: PhotoAsset[] = [...seed];
       const countriesSoFar = new Set<string>();
+      for (const p of seed) if (p.country) countriesSoFar.add(p.country);
       let processed = 0;
       let newestTs = 0;
       let cursor: string | undefined;
+      let pagesSinceCheckpoint = 0;
 
       for (;;) {
         const page = await MediaLibrary.getAssetsAsync({
@@ -645,13 +652,15 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           if (a.creationTime > newestTs) newestTs = a.creationTime;
         }
 
-        const gpsPhotos = await collectGpsPhotos(page.assets);
+        const fresh = page.assets.filter((a) => !seenIds.has(a.id));
+        const gpsPhotos = await collectGpsPhotos(fresh);
         await geocodePhotos(gpsPhotos, geoCache);
-        accumulated.push(...gpsPhotos);
-        processed += page.assets.length;
         for (const p of gpsPhotos) {
+          accumulated.push(p);
+          seenIds.add(p.id);
           if (p.country) countriesSoFar.add(p.country);
         }
+        processed += page.assets.length;
 
         // Publish this batch: map, trips and stats update live.
         setPhotos([...accumulated]);
@@ -661,6 +670,16 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           stage: "Scanning photos...",
           countriesFound: countriesSoFar.size,
         });
+
+        // Checkpoint results every few pages so a killed/interrupted scan
+        // resumes instead of restarting. scan_state is written ONLY at the
+        // very end: its absence next to a cache is the "resume needed" flag.
+        if (++pagesSinceCheckpoint >= 4) {
+          pagesSinceCheckpoint = 0;
+          try {
+            await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ photos: accumulated }));
+          } catch {}
+        }
 
         if (!page.hasNextPage || !page.endCursor || page.assets.length === 0) break;
         cursor = page.endCursor;
@@ -734,6 +753,11 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
           const merged = [...newPhotos, ...existing.filter((p) => !newIds.has(p.id))];
           setPhotos(merged);
           await persistResults(merged, nextState);
+          // New trips found by the delta scan: local notification with
+          // milestone flavor (Nth country, first in years, % of world).
+          try {
+            announceNewTrips(buildCountryTree(existing), buildCountryTree(merged));
+          } catch {}
         } else if (processed > 0 || newestTs !== state.lastScanTimestamp) {
           await persistResults(existing, nextState);
         }
@@ -757,10 +781,13 @@ export function TravelProvider({ children }: { children: React.ReactNode }) {
       if (cached) {
         const { photos: cachedPhotos } = JSON.parse(cached) as { photos: PhotoAsset[] };
         setPhotos(cachedPhotos);
-        const state: ScanState = stateRaw
-          ? JSON.parse(stateRaw)
-          : { lastScanTimestamp: Date.now(), processedCount: cachedPhotos.length };
-        runDeltaScan(cachedPhotos, state);
+        if (stateRaw) {
+          runDeltaScan(cachedPhotos, JSON.parse(stateRaw) as ScanState);
+        } else {
+          // Cache without scan state = an earlier first scan was interrupted
+          // before completing. Resume it, seeded with what we already have.
+          runFullScan(cachedPhotos);
+        }
         return;
       }
     } catch {}

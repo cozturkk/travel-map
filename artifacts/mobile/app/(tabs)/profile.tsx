@@ -154,6 +154,7 @@ function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
   if (isPremium === null) return null;
 
   if (isPremium) {
+    // The account/backup UI lives INSIDE the premium card: one box, not two.
     return (
       <View style={[styles.section, styles.premiumActiveCard, { backgroundColor: colors.card }]}>
         <View style={styles.sectionHeader}>
@@ -163,9 +164,7 @@ function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
           </View>
           <Text style={[styles.premiumActiveText, { color: colors.mutedForeground }]}>active</Text>
         </View>
-        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Cloud backup is unlocked. Thanks for supporting Travel Map!
-        </Text>
+        <AccountBody />
         <TouchableOpacity
           onPress={() => {
             Alert.alert(
@@ -227,9 +226,9 @@ function PremiumSection({ onUpgraded }: { onUpgraded: () => void }) {
 
 // ─── Cloud account (premium) ─────────────────────────────────────────────────
 
-function AccountSection() {
+// Rendered INSIDE the premium card (premium gating happens in the parent).
+function AccountBody() {
   const colors = useColors();
-  const { isPremium } = usePremium();
   const { configured, initializing, user, signIn, signUp, signOut, backup, restore } =
     useAuth();
   const { homeCity, setHomeCity } = useHomeCity();
@@ -243,41 +242,18 @@ function AccountSection() {
   const [msg, setMsg] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const cardStyle = [styles.section, { backgroundColor: colors.card, borderColor: colors.border }];
-
-  if (isPremium !== true) {
-    return (
-      <View style={cardStyle}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
-        </View>
-        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Sign in to record your travels in the cloud and restore them on any phone.
-          This is a Premium feature, unlock it above.
-        </Text>
-      </View>
-    );
-  }
-
   if (!configured) {
     return (
-      <View style={cardStyle}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cloud-offline-outline" size={18} color={colors.mutedForeground} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
-        </View>
-        <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
-          Cloud sign-in is almost ready. It needs a one-time server setup to store
-          your backups; until then your travel history is kept safely on this phone.
-        </Text>
-      </View>
+      <Text style={[styles.sectionDesc, { color: colors.mutedForeground }]}>
+        Cloud sign-in is almost ready. It needs a one-time server setup to store
+        your backups; until then your travel history is kept safely on this phone.
+      </Text>
     );
   }
 
   if (initializing) {
     return (
-      <View style={[...cardStyle, { alignItems: "center" }]}>
+      <View style={{ alignItems: "center", paddingVertical: 8 }}>
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -368,11 +344,7 @@ function AccountSection() {
 
   if (user) {
     return (
-      <View style={cardStyle}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cloud-done-outline" size={18} color={colors.accent} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account & Backup</Text>
-        </View>
+      <View style={{ gap: 12 }}>
         <View style={[styles.accountRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <Ionicons name="person-circle-outline" size={22} color={colors.primary} />
           <Text style={[styles.accountEmail, { color: colors.foreground }]} numberOfLines={1}>
@@ -417,7 +389,7 @@ function AccountSection() {
   }
 
   return (
-    <View style={cardStyle}>
+    <View style={{ gap: 12 }}>
       <View style={styles.sectionHeader}>
         <Ionicons name="cloud-upload-outline" size={18} color={colors.accent} />
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -533,11 +505,8 @@ export default function ProfileTab() {
         showsVerticalScrollIndicator={false}
       >
 
-        {/* Premium */}
+        {/* Premium (account/backup lives inside this card when unlocked) */}
         <PremiumSection onUpgraded={handleUpgraded} />
-
-        {/* Cloud account / backup (premium) */}
-        <AccountSection />
 
         {/* Home city section */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>

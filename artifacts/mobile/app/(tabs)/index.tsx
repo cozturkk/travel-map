@@ -30,9 +30,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import WebView from "react-native-webview";
 import { useColors } from "@/hooks/useColors";
 import { CountryVisit, useTravel } from "@/context/TravelContext";
-import { useBucketList } from "@/context/BucketListContext";
 import PermissionGate from "@/components/PermissionGate";
+import ScanProgress from "@/components/ScanProgress";
 import ShareCard, { ShareStats } from "@/components/ShareCard";
+import { notify } from "@/lib/notifications";
+import { manualAddMilestone } from "@/utils/milestones";
 import { buildMonthMap, calcStreaks } from "@/utils/travelStats";
 import { WORLD_COUNTRIES } from "@/data/worldCountries";
 import { CC_JS, countryToFlag } from "@/utils/countryFlags";
@@ -111,7 +113,7 @@ var baseR=Math.min(W,H)*0.47,scaleR=baseR;
 var proj=d3.geoOrthographic().scale(scaleR).translate([W/2,H/2]).clipAngle(90).precision(0.2);
 var path=d3.geoPath().projection(proj).context(ctx);
 var grat=d3.geoGraticule()();
-var features=[],centroids={},visited={},bucketList={};
+var features=[],centroids={},visited={};
 var rot=[10,-20],autoRot=true,resumeT;
 
 function resizeGlobe(){
@@ -167,7 +169,7 @@ function draw(){
   for(var i=0;i<features.length;i++){
     var f=features[i],n=f.properties.ADMIN||f.properties.name||'';
     ctx.beginPath();path(f);
-    ctx.fillStyle=visited[n]?'rgba(251,146,60,0.9)':bucketList[n]?'rgba(96,165,250,0.65)':'rgba(48,80,130,0.72)';
+    ctx.fillStyle=visited[n]?'rgba(251,146,60,0.9)':'rgba(48,80,130,0.72)';
     ctx.fill();
     ctx.strokeStyle='rgba(100,150,210,0.28)';ctx.lineWidth=0.5;ctx.stroke();
   }
@@ -224,7 +226,7 @@ function handleTap(x,y){
   for(var i=0;i<features.length;i++){
     if(d3.geoContains(features[i],co)){
       var n=features[i].properties.ADMIN||features[i].properties.name||'';
-      if(n)sendUp(JSON.stringify({type:'countryTap',country:n,isVisited:!!visited[n],inBucket:!!bucketList[n]}));
+      if(n)sendUp(JSON.stringify({type:'countryTap',country:n,isVisited:!!visited[n]}));
       return;
     }
   }
@@ -286,10 +288,7 @@ function handleMsg(e){
     var d=typeof e.data==='string'?JSON.parse(e.data):e.data;
     if(d.type==='resize'){resizeGlobe();}
     else if(d.type==='updateCountries'){visited={};d.countries.forEach(function(c){visited[c]=true;});draw();}
-    else if(d.type==='updateBucketList'){bucketList={};d.countries.forEach(function(c){bucketList[c]=true;});draw();}
-    else if(d.type==='markVisited'){visited[d.country]=true;delete bucketList[d.country];draw();}
-    else if(d.type==='markBucket'){bucketList[d.country]=true;draw();}
-    else if(d.type==='unmarkBucket'){delete bucketList[d.country];draw();}
+    else if(d.type==='markVisited'){visited[d.country]=true;draw();}
     else if(d.type==='zoomCountry'){
       var ce=centroids[d.country];if(!ce)return;
       var t0=Date.now(),s0=[rot[0],rot[1]],tgt=[-ce.lng,-(ce.lat*0.6)];
@@ -354,7 +353,6 @@ export default function MapTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { permissionGranted, isLoading, initialScanning, progress, countries, visitedCountryNames, photos, accessPrivileges, addMorePhotos } = useTravel();
-  const { bucketList, addToBucket, removeFromBucket, isInBucket } = useBucketList();
 
   const webviewRef = useRef<WebView>(null);
   const iframeRef = useRef<any>(null);
@@ -416,10 +414,13 @@ export default function MapTab() {
   const [confirmModal, setConfirmModal] = useState(false);
   const [manualDetailCountry, setManualDetailCountry] = useState<string | null>(null);
   const [manualDetailModal, setManualDetailModal] = useState(false);
-  const [bucketActionCountry, setBucketActionCountry] = useState<string | null>(null);
-  const [bucketActionModal, setBucketActionModal] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // The first-run scan card can be dismissed; it comes back for a new scan.
+  const [scanCardHidden, setScanCardHidden] = useState(false);
+  useEffect(() => {
+    if (initialScanning) setScanCardHidden(false);
+  }, [initialScanning]);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
@@ -502,11 +503,6 @@ export default function MapTab() {
     return () => clearTimeout(t);
   }, [mapReady, allVisited, sendToMap]);
 
-  useEffect(() => {
-    if (!mapReady) return;
-    const t = setTimeout(() => sendToMap({ type: "updateBucketList", countries: bucketList }), 250);
-    return () => clearTimeout(t);
-  }, [mapReady, bucketList, sendToMap]);
 
   useEffect(() => {
     if (!isWeb) return;
@@ -518,7 +514,7 @@ export default function MapTab() {
     return () => window.removeEventListener("message", handler);
   });
 
-  function handleMapMessage(msg: { type: string; country?: string; isVisited?: boolean; inBucket?: boolean }) {
+  function handleMapMessage(msg: { type: string; country?: string; isVisited?: boolean }) {
     if (msg.type === "mapReady") {
       setMapReady(true);
     } else if (msg.type === "countryTap" && msg.country) {
@@ -528,9 +524,6 @@ export default function MapTab() {
         const tripData = countries.find((c) => c.country === country);
         if (tripData) { setDetailCountry(tripData); setDetailModal(true); }
         else { setManualDetailCountry(country); setManualDetailModal(true); }
-      } else if (isInBucket(country)) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setBucketActionCountry(country); setBucketActionModal(true);
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setConfirmCountry(country); setConfirmModal(true);
@@ -544,18 +537,15 @@ export default function MapTab() {
 
   function handleMarkVisited(country: string) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const isNew = !allVisited.includes(country);
     setManuallyVisited((prev) => [...new Set([...prev, country])]);
-    removeFromBucket(country);
     sendToMap({ type: "markVisited", country });
     setConfirmModal(false); setConfirmCountry(null);
-    setBucketActionModal(false); setBucketActionCountry(null);
-  }
-
-  function handleAddToBucket(country: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    addToBucket(country);
-    sendToMap({ type: "markBucket", country });
-    setConfirmModal(false); setConfirmCountry(null);
+    // Milestone banner for a hand-added country.
+    if (isNew) {
+      const newCount = new Set([...allVisited, country]).size;
+      notify(`${country} marked as visited`, manualAddMilestone(newCount));
+    }
   }
 
   function handleUnmarkVisited(country: string) {
@@ -563,13 +553,6 @@ export default function MapTab() {
     setManuallyVisited((prev) => prev.filter((c) => c !== country));
     setManualDetailModal(false); setManualDetailCountry(null);
     setTimeout(() => sendToMap({ type: "updateCountries", countries: allVisited.filter((c) => c !== country) }), 100);
-  }
-
-  function handleRemoveFromBucket(country: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    removeFromBucket(country);
-    sendToMap({ type: "unmarkBucket", country });
-    setBucketActionModal(false); setBucketActionCountry(null);
   }
 
   if (permissionGranted === false) return <PermissionGate />;
@@ -584,13 +567,6 @@ export default function MapTab() {
           <Text style={[styles.badgeCount, { color: colors.accent }]}>
             {isLoading ? "…" : allVisited.length}
           </Text>
-          {!isLoading && bucketList.length > 0 && (
-            <>
-              <View style={[styles.badgeDivider, { backgroundColor: colors.border }]} />
-              <Ionicons name="bookmark" size={13} color={colors.primary} />
-              <Text style={[styles.badgeCount, { color: colors.primary }]}>{bucketList.length}</Text>
-            </>
-          )}
         </View>
         <View style={styles.topBarRight}>
           <TouchableOpacity
@@ -600,7 +576,7 @@ export default function MapTab() {
           >
             <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
           </TouchableOpacity>
-          {!isLoading && (allVisited.length > 0 || bucketList.length > 0) && mapReady && (
+          {!isLoading && allVisited.length > 0 && mapReady && (
             <TouchableOpacity
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareVisible(true); }}
               activeOpacity={0.8}
@@ -634,26 +610,28 @@ export default function MapTab() {
         {/* First-run experience: shown ONLY when no prior scan exists. The
             globe behind it fills in live as batches complete; that IS the
             loading experience. */}
-        {initialScanning ? (
+        {initialScanning && !scanCardHidden ? (
           <View style={styles.firstRunWrap} pointerEvents="box-none">
             <View style={[styles.firstRunCard, { backgroundColor: "rgba(15,23,42,0.92)", borderColor: colors.border }]}>
-              <View style={styles.firstRunTitleRow}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={[styles.firstRunTitle, { color: colors.foreground }]}>
-                  Building your travel map
-                </Text>
-              </View>
+              <TouchableOpacity
+                onPress={() => setScanCardHidden(true)}
+                hitSlop={10}
+                style={styles.firstRunClose}
+              >
+                <Ionicons name="close" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+              <Text style={[styles.firstRunTitle, { color: colors.foreground }]}>
+                Building your travel map
+              </Text>
               <Text style={[styles.firstRunSub, { color: colors.mutedForeground }]}>
                 This takes a minute or two the first time. After this, it's instant.
               </Text>
-              {progress.total > 0 && (
-                <Text style={[styles.firstRunProgress, { color: colors.accent }]}>
-                  {progress.current.toLocaleString()} of {progress.total.toLocaleString()}
-                  {accessPrivileges === "limited" ? " selected photos" : " photos"}
-                  {" · "}
-                  {progress.countriesFound} {progress.countriesFound === 1 ? "country" : "countries"} found so far
-                </Text>
-              )}
+              <ScanProgress
+                current={progress.current}
+                total={progress.total}
+                countriesFound={progress.countriesFound}
+                label={accessPrivileges === "limited" ? "selected photos" : undefined}
+              />
               {accessPrivileges === "limited" && (
                 <TouchableOpacity
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); addMorePhotos(); }}
@@ -786,15 +764,8 @@ export default function MapTab() {
               <Ionicons name="location" size={28} color={colors.accent} />
             </View>
             <Text style={[styles.confirmTitle, { color: colors.foreground }]}>{confirmCountry}</Text>
-            <Text style={[styles.confirmSub, { color: colors.mutedForeground }]}>What would you like to do?</Text>
+            <Text style={[styles.confirmSub, { color: colors.mutedForeground }]}>Have you been here?</Text>
             <View style={styles.confirmBtns}>
-              <TouchableOpacity
-                onPress={() => confirmCountry && handleAddToBucket(confirmCountry)}
-                style={[styles.confirmBtnBucket, { backgroundColor: "#38BDF822", borderColor: "#38BDF844" }]}
-              >
-                <Ionicons name="bookmark-outline" size={17} color="#38BDF8" />
-                <Text style={[styles.confirmBtnBucketText, { color: "#38BDF8" }]}>Save to Bucket List</Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => confirmCountry && handleMarkVisited(confirmCountry)}
                 style={[styles.confirmBtnYes, { backgroundColor: colors.accent }]}
@@ -806,40 +777,6 @@ export default function MapTab() {
             </View>
             <TouchableOpacity onPress={() => setConfirmModal(false)} style={styles.skipBtn}>
               <Text style={[styles.skipBtnText, { color: colors.mutedForeground }]}>Skip</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ── Bucket action sheet ── */}
-      <Modal visible={bucketActionModal} transparent animationType="slide" onRequestClose={() => setBucketActionModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setBucketActionModal(false)}>
-          <Pressable style={[styles.confirmSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20 }]} onPress={() => {}}>
-            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
-            <View style={[styles.confirmIconWrap, { backgroundColor: "#38BDF811" }]}>
-              <Ionicons name="bookmark" size={28} color="#38BDF8" />
-            </View>
-            <Text style={[styles.confirmTitle, { color: colors.foreground }]}>{bucketActionCountry}</Text>
-            <Text style={[styles.confirmSub, { color: colors.mutedForeground }]}>This country is on your bucket list</Text>
-            <View style={styles.confirmBtns}>
-              <TouchableOpacity
-                onPress={() => bucketActionCountry && handleRemoveFromBucket(bucketActionCountry)}
-                style={[styles.confirmBtnNo, { backgroundColor: colors.muted, borderColor: colors.border }]}
-              >
-                <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} />
-                <Text style={[styles.confirmBtnNoText, { color: colors.mutedForeground }]}>Remove</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => bucketActionCountry && handleMarkVisited(bucketActionCountry)}
-                style={[styles.confirmBtnYes, { backgroundColor: colors.accent }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={17} color={colors.accentForeground} />
-                <Text style={[styles.confirmBtnYesText, { color: colors.accentForeground }]}>I've been here!</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={() => setBucketActionModal(false)} style={styles.skipBtn}>
-              <Text style={[styles.skipBtnText, { color: colors.mutedForeground }]}>Close</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -915,7 +852,6 @@ export default function MapTab() {
                 }
                 renderItem={({ item: country }) => {
                   const visited = allVisited.includes(country);
-                  const bucketed = isInBucket(country);
                   return (
                     <View style={[styles.searchRow, { borderTopColor: colors.border }]}>
                       <Text style={[styles.searchRowName, { color: colors.foreground }]}>
@@ -926,28 +862,13 @@ export default function MapTab() {
                           style={[styles.searchActionBtn, { backgroundColor: visited ? colors.accent + "33" : colors.background }]}
                           onPress={() => {
                             if (visited) return;
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            setManuallyVisited(prev => [...new Set([...prev, country])]);
-                            sendToMap({ type: "markVisited", country });
+                            handleMarkVisited(country);
                           }}
                           activeOpacity={visited ? 1 : 0.7}
                         >
                           <Ionicons name={visited ? "checkmark-circle" : "checkmark-circle-outline"} size={16} color={visited ? colors.accent : colors.mutedForeground} />
                           <Text style={[styles.searchActionLabel, { color: visited ? colors.accent : colors.mutedForeground }]}>
                             {visited ? "Visited" : "Been here"}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.searchActionBtn, { backgroundColor: bucketed ? colors.primary + "33" : colors.background }]}
-                          onPress={() => {
-                            if (bucketed) { removeFromBucket(country); sendToMap({ type: "unmarkBucket", country }); }
-                            else { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); addToBucket(country); sendToMap({ type: "markBucket", country }); }
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name={bucketed ? "bookmark" : "bookmark-outline"} size={15} color={bucketed ? colors.primary : colors.mutedForeground} />
-                          <Text style={[styles.searchActionLabel, { color: bucketed ? colors.primary : colors.mutedForeground }]}>
-                            {bucketed ? "Saved" : "Bucket list"}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1079,9 +1000,9 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     width: "100%",
   },
-  firstRunTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  firstRunTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  firstRunSub: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+  firstRunClose: { position: "absolute", top: 10, right: 10, zIndex: 2 },
+  firstRunTitle: { fontSize: 16, fontFamily: "Inter_700Bold", textAlign: "center" },
+  firstRunSub: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, textAlign: "center", marginBottom: 4 },
   firstRunProgress: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 2 },
   firstRunAddBtn: {
     flexDirection: "row",
